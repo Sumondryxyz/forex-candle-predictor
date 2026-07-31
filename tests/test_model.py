@@ -1,5 +1,6 @@
 import numpy as np
 import pandas as pd
+from sklearn.ensemble import HistGradientBoostingClassifier
 
 from predictor import model
 from predictor.features import build_dataset
@@ -41,3 +42,12 @@ def test_predict_latest_returns_direction_and_confidence():
     assert pred.direction in {"UP", "DOWN"}
     assert 0.5 <= pred.confidence <= 1.0
     assert pred.timestamp == df.index[-1]
+
+
+def test_sklearn_fallback_when_lightgbm_is_missing(monkeypatch):
+    monkeypatch.setattr(model, "lgb", None)
+    assert isinstance(model.make_classifier(), HistGradientBoostingClassifier)
+
+    X, y = build_dataset(_trending_candles(600))
+    clf = model.train(X, y, calibrate=False)
+    assert clf.predict_proba(X.head(3)).shape == (3, 2)

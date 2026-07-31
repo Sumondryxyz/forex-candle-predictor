@@ -6,10 +6,15 @@ from dataclasses import dataclass
 from pathlib import Path
 
 import joblib
-import lightgbm as lgb
 import numpy as np
 import pandas as pd
 from sklearn.calibration import CalibratedClassifierCV
+from sklearn.ensemble import HistGradientBoostingClassifier
+
+try:  # LightGBM has no wheels on Android/Termux, fall back to scikit-learn there.
+    import lightgbm as lgb
+except ImportError:  # pragma: no cover - platform dependent
+    lgb = None
 
 from .features import FEATURE_COLUMNS, build_dataset, build_features
 
@@ -28,6 +33,23 @@ PARAMS = {
     "reg_lambda": 5.0,
     "verbose": -1,
 }
+
+SKLEARN_PARAMS = {
+    "learning_rate": 0.03,
+    "max_iter": 300,
+    "max_leaf_nodes": 15,
+    "max_depth": 4,
+    "min_samples_leaf": 60,
+    "l2_regularization": 5.0,
+    "early_stopping": False,
+}
+
+
+def make_classifier():
+    """LightGBM when available, otherwise an equivalent scikit-learn model."""
+    if lgb is None:
+        return HistGradientBoostingClassifier(**SKLEARN_PARAMS)
+    return lgb.LGBMClassifier(**PARAMS)
 
 
 @dataclass
@@ -48,7 +70,7 @@ def train(X: pd.DataFrame, y: pd.Series, calibrate: bool = True):
     Calibration matters here because signals are filtered on confidence: an
     uncalibrated 0.70 score does not mean a 70% hit rate.
     """
-    base = lgb.LGBMClassifier(**PARAMS)
+    base = make_classifier()
     if not calibrate or len(X) < 800 or y.nunique() < 2:
         base.fit(X, y)
         return base

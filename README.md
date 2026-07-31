@@ -89,12 +89,32 @@ Then in Telegram: `/auto EURUSD 1m`. The bot only messages when confidence
 clears `MIN_CONFIDENCE`, states the entry time in UTC, and stays silent while
 the forex market is closed (weekends). `/stop` cancels it.
 
+## Running on Android (Termux)
+
+No PC needed — and a phone's mobile IP is exactly what the Quotex feed needs to
+get past Cloudflare. LightGBM has no Android wheels, so the model automatically
+falls back to scikit-learn's `HistGradientBoostingClassifier` when the import
+fails (measured accuracy is within ~1 point: 57.4% at ≥0.55, 58.6% at ≥0.60).
+
+```bash
+pkg update && pkg install python git python-numpy build-essential -y
+pip install pandas scikit-learn yfinance joblib "python-telegram-bot[job-queue]"
+git clone https://github.com/Sumondryxyz/forex-candle-predictor.git
+cd forex-candle-predictor
+python train_backtest.py --pair EURUSD --interval 1m --context-pairs GBPUSD,AUDUSD
+export TELEGRAM_BOT_TOKEN=...
+python bot.py
+```
+
+Keep it alive in the background with `termux-wake-lock` and run the bot under
+`nohup python bot.py &` so Android does not suspend it.
+
 ## Layout
 
 - `predictor/data.py` — OHLC download (yfinance spot forex)
 - `predictor/sources/` — pluggable candle feeds (`DATA_SOURCE=yfinance|quotex`)
 - `predictor/features.py` — 35 indicator features, all causal (no look-ahead)
-- `predictor/model.py` — LightGBM classifier, walk-forward evaluation
+- `predictor/model.py` — LightGBM (or scikit-learn) classifier, walk-forward evaluation
 - `predictor/backtest.py` — accuracy vs confidence reporting
 - `train_backtest.py` — CLI: train + backtest + save model
 - `predictor/scheduler.py` — candle-close alignment and forex market hours
