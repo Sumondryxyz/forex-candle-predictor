@@ -1,0 +1,50 @@
+{
+  "samples": 8316,
+  "overall_accuracy_pct": 53.32,
+  "always_majority_baseline_pct": 51.02,
+  "up_rate_pct": 48.98,
+  "by_confidence": [
+    {
+      "min_confidence": 0.5,
+      "signals": 8316,
+      "coverage_pct": 100.0,
+      "accuracy_pct": 53.32
+    },
+    {
+      "min_confidence": 0.55,
+      "signals": 5542,
+      "coverage_pct": 66.64,
+      "accuracy_pct": 54.58
+    },
+    {
+      "min_confidence": 0.6,
+      "signals": 3202,
+      "coverage_pct": 38.5,
+      "accuracy_pct": 56.68
+    },
+    {
+      "min_confidence": 0.65,
+      "signals": 1534,
+      "coverage_pct": 18.45,
+      "accuracy_pct": 57.95
+    },
+    {
+      "min_confidence": 0.7,
+      "signals": 544,
+      "coverage_pct": 6.54,
+      "accuracy_pct": 61.58
+    },
+    {
+      "min_confidence": 0.75,
+      "signals": 152,
+      "coverage_pct": 1.83,
+      "accuracy_pct": 68.42
+    },
+    {
+      "min_confidence": 0.8,
+      "signals": 19,
+      "coverage_pct": 0.23,
+      "accuracy_pct": 63.16
+    }
+  ]
+}
