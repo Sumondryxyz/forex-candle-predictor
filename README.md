@@ -37,6 +37,35 @@ What moved the numbers versus the first version (53% / 61% at ≥0.70):
 - **Higher-timeframe context**, 20-candle range position, mean-reversion z-score,
   return autocorrelation, and London/NY session flags (35 features total).
 
+### 1-minute timeframe (Quotex-style trading)
+
+EURUSD 1m, same pooled + calibrated setup, 1773 out-of-sample candles:
+
+| Confidence filter | Signals | Accuracy | ROI per trade @80% payout |
+|---|---|---|---|
+| all candles | 1773 | 55.0% | −1.0% |
+| ≥ 0.55 | 453 (26%) | 58.5% | +5.3% |
+| ≥ 0.60 | 185 (10%) | 59.5% | +7.0% |
+| ≥ 0.70 | 63 (3.6%) | 63.5% | +14.3% |
+
+yfinance only keeps 7 days of 1m history, so the 1m sample is small — re-run
+training regularly to keep the model on recent data.
+
+## Quotex usage
+
+Quotex has no official API, and unofficial trading clients violate its terms and
+risk account bans, so this project **does not place trades**. It sends a signal
+a few seconds before each candle closes and you enter manually:
+
+```bash
+python train_backtest.py --pair EURUSD --interval 1m --context-pairs GBPUSD,AUDUSD,USDCHF
+MIN_CONFIDENCE=0.60 TELEGRAM_BOT_TOKEN=... python bot.py
+```
+
+Then in Telegram: `/auto EURUSD 1m`. The bot only messages when confidence
+clears `MIN_CONFIDENCE`, states the entry time in UTC, and stays silent while
+the forex market is closed (weekends). `/stop` cancels it.
+
 ## Layout
 
 - `predictor/data.py` — OHLC download (yfinance spot forex)
@@ -44,6 +73,7 @@ What moved the numbers versus the first version (53% / 61% at ≥0.70):
 - `predictor/model.py` — LightGBM classifier, walk-forward evaluation
 - `predictor/backtest.py` — accuracy vs confidence reporting
 - `train_backtest.py` — CLI: train + backtest + save model
+- `predictor/scheduler.py` — candle-close alignment and forex market hours
 - `bot.py` — Telegram interface
 
 ## Usage
@@ -57,7 +87,8 @@ export ALLOWED_USER_IDS=123456789      # optional access control
 python bot.py
 ```
 
-Bot commands: `/signal EURUSD 5m`, `/stats EURUSD 5m`, `/pairs`.
+Bot commands: `/signal EURUSD 1m`, `/auto EURUSD 1m`, `/stop`,
+`/stats EURUSD 1m`, `/pairs`.
 
 ## Methodology
 

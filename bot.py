@@ -3,6 +3,8 @@
 
 Commands:
   /signal <PAIR> [interval]  e.g. /signal EURUSD 5m
+  /auto <PAIR> [interval]    push a signal before every candle close
+  /stop                      cancel automatic signals
   /stats <PAIR> [interval]   backtested accuracy of the loaded model
   /pairs                     supported pairs
 """
@@ -16,6 +18,11 @@ from telegram.ext import Application, CommandHandler, ContextTypes
 
 from predictor import backtest, model
 from predictor.data import PAIRS, fetch_ohlc
+from predictor.scheduler import (
+    is_market_open,
+    next_candle_open,
+    seconds_until_next_close,
+)
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 log = logging.getLogger(__name__)
@@ -44,8 +51,10 @@ def _args(context: ContextTypes.DEFAULT_TYPE) -> tuple[str, str]:
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     await update.message.reply_text(
         "Next-candle direction bot.\n"
-        "/signal EURUSD 5m \u2014 prediction for the upcoming candle\n"
-        "/stats EURUSD 5m \u2014 walk-forward accuracy\n"
+        "/signal EURUSD 1m \u2014 prediction for the upcoming candle\n"
+        "/auto EURUSD 1m \u2014 push high-confidence signals every candle\n"
+        "/stop \u2014 cancel automatic signals\n"
+        "/stats EURUSD 1m \u2014 walk-forward accuracy\n"
         "/pairs \u2014 supported pairs\n\n" + DISCLAIMER
     )
 
@@ -66,18 +75,7 @@ async def signal(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         await update.message.reply_text(f"\u274c {exc}")
         return
 
-    verdict = "TRADE" if pred.confidence >= MIN_CONFIDENCE else "NO TRADE (low confidence)"
-    arrow = "\U0001f7e2 UP" if pred.direction == "UP" else "\U0001f534 DOWN"
-    edge = backtest.roi_pct(pred.confidence, PAYOUT)
-    await update.message.reply_text(
-        f"*{pair} {interval}*\n"
-        f"Next candle: {arrow}\n"
-        f"Confidence: {pred.confidence * 100:.1f}%\n"
-        f"Expected value at {PAYOUT * 100:.0f}% payout: {edge:+.1f}% per trade\n"
-        f"Decision: {verdict}\n"
-        f"Last closed candle: {pred.timestamp}\n\n{DISCLAIMER}",
-        parse_mode="Markdown",
-    )
+    await update.message.reply_text(_format_signal(pair, interval, pred), parse_mode="Markdown")
 
 
 async def stats(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -108,6 +106,78 @@ async def stats(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     await update.message.reply_text("\n".join(lines), parse_mode="Markdown")
 
 
+def _format_signal(pair: str, interval: str, pred: model.Prediction) -> str:
+    arrow = "\U0001f7e2 UP (CALL)" if pred.direction == "UP" else "\U0001f534 DOWN (PUT)"
+    verdict = "TRADE" if pred.confidence >= MIN_CONFIDENCE else "NO TRADE (low confidence)"
+    return (
+        f"*{pair} {interval}*\n"
+        f"Next candle: {arrow}\n"
+        f"Confidence: {pred.confidence * 100:.1f}%\n"
+        f"Expected value at {PAYOUT * 100:.0f}% payout: "
+        f"{backtest.roi_pct(pred.confidence, PAYOUT):+.1f}% per trade\n"
+        f"Decision: {verdict}\n"
+        f"Entry at: {next_candle_open(interval):%H:%M:%S} UTC\n\n{DISCLAIMER}"
+    )
+
+
+async def _auto_tick(context: ContextTypes.DEFAULT_TYPE) -> None:
+    job = context.job
+    pair, interval = job.data["pair"], job.data["interval"]
+    job.job_queue.run_once(
+        _auto_tick, seconds_until_next_close(interval), data=job.data, chat_id=job.chat_id,
+        name=job.name,
+    )
+    if not is_market_open():
+        return
+    try:
+        pred = model.predict_latest(model.load(pair, interval), fetch_ohlc(pair, interval))
+    except (FileNotFoundError, RuntimeError, ValueError) as exc:
+        log.warning("auto signal failed for %s %s: %s", pair, interval, exc)
+        return
+    if pred.confidence < MIN_CONFIDENCE:
+        return
+    await context.bot.send_message(
+        job.chat_id, _format_signal(pair, interval, pred), parse_mode="Markdown"
+    )
+
+
+def _job_name(chat_id: int) -> str:
+    return f"auto-{chat_id}"
+
+
+async def auto(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if not _authorised(update):
+        return
+    pair, interval = _args(context)
+    chat_id = update.effective_chat.id
+    for job in context.job_queue.get_jobs_by_name(_job_name(chat_id)):
+        job.schedule_removal()
+    try:
+        model.load(pair, interval)
+        delay = seconds_until_next_close(interval)
+    except (FileNotFoundError, ValueError) as exc:
+        await update.message.reply_text(f"\u274c {exc}")
+        return
+    context.job_queue.run_once(
+        _auto_tick,
+        delay,
+        data={"pair": pair, "interval": interval},
+        chat_id=chat_id,
+        name=_job_name(chat_id),
+    )
+    await update.message.reply_text(
+        f"\u2705 Auto signals on for {pair} {interval}. "
+        f"Only confidence \u2265 {MIN_CONFIDENCE * 100:.0f}% is sent; /stop to cancel."
+    )
+
+
+async def stop(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    jobs = context.job_queue.get_jobs_by_name(_job_name(update.effective_chat.id))
+    for job in jobs:
+        job.schedule_removal()
+    await update.message.reply_text("Auto signals off." if jobs else "No auto signals running.")
+
+
 def main() -> None:
     token = os.environ["TELEGRAM_BOT_TOKEN"]
     app = Application.builder().token(token).build()
@@ -115,6 +185,8 @@ def main() -> None:
     app.add_handler(CommandHandler("help", start))
     app.add_handler(CommandHandler("pairs", pairs))
     app.add_handler(CommandHandler("signal", signal))
+    app.add_handler(CommandHandler("auto", auto))
+    app.add_handler(CommandHandler("stop", stop))
     app.add_handler(CommandHandler("stats", stats))
     log.info("bot polling")
     app.run_polling()
