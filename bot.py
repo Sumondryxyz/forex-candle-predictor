@@ -17,17 +17,19 @@ from telegram import Update
 from telegram.ext import Application, CommandHandler, ContextTypes
 
 from predictor import backtest, model
-from predictor.data import PAIRS, fetch_ohlc
+from predictor.data import PAIRS
 from predictor.scheduler import (
     is_market_open,
     next_candle_open,
     seconds_until_next_close,
 )
+from predictor.sources import get_fetcher
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 log = logging.getLogger(__name__)
 
 DEFAULT_INTERVAL = os.getenv("DEFAULT_INTERVAL", "5m")
+fetch_ohlc = get_fetcher()
 MIN_CONFIDENCE = float(os.getenv("MIN_CONFIDENCE", "0.60"))
 PAYOUT = float(os.getenv("PAYOUT", "0.80"))
 ALLOWED_USER_IDS = {int(x) for x in os.getenv("ALLOWED_USER_IDS", "").replace(" ", "").split(",") if x}

@@ -6,8 +6,8 @@ import argparse
 from pathlib import Path
 
 from predictor import backtest, model
-from predictor.data import fetch_ohlc
 from predictor.features import build_dataset
+from predictor.sources import get_fetcher
 
 REPORTS = Path(__file__).resolve().parent / "reports"
 
@@ -25,7 +25,10 @@ def main() -> None:
         help="comma separated pairs pooled into training, e.g. GBPUSD,AUDUSD",
     )
     ap.add_argument("--no-calibration", action="store_true")
+    ap.add_argument("--source", default=None, help="yfinance (default) or quotex")
     args = ap.parse_args()
+
+    fetch_ohlc = get_fetcher(args.source)
 
     df = fetch_ohlc(args.pair, args.interval, args.days)
     print(f"{args.pair} {args.interval}: {len(df)} candles ({df.index[0]} -> {df.index[-1]})")

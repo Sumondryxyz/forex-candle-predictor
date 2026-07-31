@@ -62,6 +62,29 @@ python train_backtest.py --pair EURUSD --interval 1m --context-pairs GBPUSD,AUDU
 MIN_CONFIDENCE=0.60 TELEGRAM_BOT_TOKEN=... python bot.py
 ```
 
+### Quotex candles instead of Yahoo (optional, unofficial)
+
+By default candles come from Yahoo Finance, which lags real time by 15–60s and
+does not carry Quotex's OTC pairs. `DATA_SOURCE=quotex` switches to the broker's
+own WebSocket via the community `pyquotex` client:
+
+```bash
+pip install "git+https://github.com/cleitonleonel/pyquotex.git"   # needs Python >= 3.12
+export DATA_SOURCE=quotex QUOTEX_EMAIL=... QUOTEX_PASSWORD=... QUOTEX_ACCOUNT=PRACTICE
+```
+
+Caveats, all verified the hard way:
+
+- This is **not an official API** and using it breaks Quotex's terms; accounts
+  can be banned. Read-only candle access is all this project does — it never
+  places a trade.
+- Cloudflare blocks the login from datacenter IPs (HTTP 403 / endless "verify
+  you are human"), so it only works from a home connection. It is therefore
+  untested in CI and in this repo's development environment.
+- If your browser is already logged in, dump its cookies to a JSON file with
+  `cookies`, `token` and `user_agent` keys and point `QUOTEX_SESSION_FILE` at
+  it to skip the password login.
+
 Then in Telegram: `/auto EURUSD 1m`. The bot only messages when confidence
 clears `MIN_CONFIDENCE`, states the entry time in UTC, and stays silent while
 the forex market is closed (weekends). `/stop` cancels it.
@@ -69,6 +92,7 @@ the forex market is closed (weekends). `/stop` cancels it.
 ## Layout
 
 - `predictor/data.py` — OHLC download (yfinance spot forex)
+- `predictor/sources/` — pluggable candle feeds (`DATA_SOURCE=yfinance|quotex`)
 - `predictor/features.py` — 35 indicator features, all causal (no look-ahead)
 - `predictor/model.py` — LightGBM classifier, walk-forward evaluation
 - `predictor/backtest.py` — accuracy vs confidence reporting
