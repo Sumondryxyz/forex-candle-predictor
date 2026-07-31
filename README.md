@@ -73,14 +73,28 @@ pip install "git+https://github.com/cleitonleonel/pyquotex.git"   # needs Python
 export DATA_SOURCE=quotex QUOTEX_EMAIL=... QUOTEX_PASSWORD=... QUOTEX_ACCOUNT=PRACTICE
 ```
 
+Two client bugs are patched in `predictor/quotex_session.py` (without them the
+socket always answers `authorization/reject`):
+
+- Quotex sets `laravel_session` twice during login — guest first, then
+  authenticated — and pyquotex forwards both, so the server sees a guest. Only
+  the last value of each cookie is kept.
+- The socket session is no longer in `window.settings`; it comes from the
+  authenticated `/api/v1/cabinets/digest` endpoint.
+
+Accounts are served from `market-qx.trade`, not `qxbroker.com`; override with
+`QUOTEX_HOST` if yours differs.
+
 Caveats, all verified the hard way:
 
 - This is **not an official API** and using it breaks Quotex's terms; accounts
   can be banned. Read-only candle access is all this project does — it never
   places a trade.
 - Cloudflare blocks the login from datacenter IPs (HTTP 403 / endless "verify
-  you are human"), so it only works from a home connection. It is therefore
-  untested in CI and in this repo's development environment.
+  you are human"), so it only works from a home or mobile connection. It is
+  therefore untested in CI; it was verified by hand from a phone on Termux.
+- Passwords containing `$` or `#` need single quotes in the shell, otherwise
+  the shell eats part of them and Quotex answers "Invalid email or password".
 - If your browser is already logged in, dump its cookies to a JSON file with
   `cookies`, `token` and `user_agent` keys and point `QUOTEX_SESSION_FILE` at
   it to skip the password login.
@@ -95,6 +109,31 @@ No PC needed — and a phone's mobile IP is exactly what the Quotex feed needs t
 get past Cloudflare. LightGBM has no Android wheels, so the model automatically
 falls back to scikit-learn's `HistGradientBoostingClassifier` when the import
 fails (measured accuracy is within ~1 point: 57.4% at ≥0.55, 58.6% at ≥0.60).
+
+### Quotex candles straight from the phone (verified working)
+
+Only numpy is needed, so nothing has to be compiled:
+
+```bash
+pkg update -y && pkg install python git python-numpy -y
+pip install "git+https://github.com/cleitonleonel/pyquotex.git"
+git clone https://github.com/Sumondryxyz/forex-candle-predictor.git
+cd forex-candle-predictor
+export QUOTEX_EMAIL='you@example.com'
+export QUOTEX_PASSWORD='yourpassword'
+
+python quotex_candles.py    # live broker candles, one line each
+python quotex_signals.py    # UP/DOWN + confidence, then WIN/LOSS per candle
+```
+
+`PAIR=EURUSD_otc`, `PERIOD=300` (5m) and `MIN_CONF=0.65` tune the signal run.
+`quotex_signals.py` trains a small logistic regression on the pair's own recent
+history — deliberately light so it runs on a phone; expect roughly 55–60% live,
+not the 80–90% the internet promises.
+
+If login fails with a stale token, delete the cached `session.json` first.
+
+### Full model with Telegram
 
 ```bash
 pkg update && pkg install python git python-numpy build-essential -y
@@ -119,6 +158,8 @@ Keep it alive in the background with `termux-wake-lock` and run the bot under
 - `train_backtest.py` — CLI: train + backtest + save model
 - `predictor/scheduler.py` — candle-close alignment and forex market hours
 - `bot.py` — Telegram interface
+- `quotex_candles.py` / `quotex_signals.py` — terminal-only Quotex tools
+- `predictor/quotex_session.py` — login/cookie fixes for the unofficial client
 
 ## Usage
 

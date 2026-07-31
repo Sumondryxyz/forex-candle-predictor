@@ -20,9 +20,11 @@ from pathlib import Path
 
 import pandas as pd
 
+from .. import quotex_session
 from ..scheduler import interval_seconds
 
 SESSION_FILE = os.getenv("QUOTEX_SESSION_FILE", "")
+HOST = quotex_session.DEFAULT_HOST
 ROOT_PATH = os.getenv("QUOTEX_ROOT_PATH", str(Path.home() / ".quotex"))
 
 
@@ -36,10 +38,12 @@ def _client():
             "(needs Python >= 3.12)"
         ) from exc
 
+    quotex_session.apply(HOST)
     client = Quotex(
         email=os.getenv("QUOTEX_EMAIL", ""),
         password=os.getenv("QUOTEX_PASSWORD", ""),
         lang="en",
+        host=HOST,
         root_path=ROOT_PATH,
     )
     client.set_account_mode(os.getenv("QUOTEX_ACCOUNT", "PRACTICE"))
