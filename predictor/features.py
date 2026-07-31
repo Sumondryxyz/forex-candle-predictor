@@ -15,7 +15,13 @@ FEATURE_COLUMNS = [
     "rsi_14", "rsi_slope", "macd_hist", "macd_slope",
     "bb_pos", "atr_pct", "stoch_k", "stoch_d",
     "vol_ratio", "streak", "hour_sin", "hour_cos",
+    "htf_ret", "htf_ema_dist", "htf_rsi", "htf_align",
+    "dist_high_20", "dist_low_20", "mean_rev_z", "autocorr_10",
+    "session_london", "session_ny", "session_overlap", "dow",
 ]
+
+# Number of base candles aggregated into one higher-timeframe candle.
+HTF_FACTOR = 12
 
 
 def _rsi(close: pd.Series, period: int = 14) -> pd.Series:
@@ -63,6 +69,7 @@ def build_features(df: pd.DataFrame) -> pd.DataFrame:
     stoch_k = 100 * (close - lowest14) / (highest14 - lowest14).replace(0, np.nan)
     rsi = _rsi(close)
     hour = df.index.hour + df.index.minute / 60
+    utc_hour = df.index.tz_convert("UTC").hour if df.index.tz is not None else df.index.hour
 
     out = pd.DataFrame(index=df.index)
     out["ret_1"] = close.pct_change()
@@ -93,6 +100,28 @@ def build_features(df: pd.DataFrame) -> pd.DataFrame:
     out["streak"] = _streak(np.sign(close - open_).astype(int))
     out["hour_sin"] = np.sin(2 * np.pi * hour / 24)
     out["hour_cos"] = np.cos(2 * np.pi * hour / 24)
+
+    # Higher-timeframe context, built by rolling the base candles so it stays causal.
+    htf_close = close.rolling(HTF_FACTOR).mean()
+    htf_ema = close.ewm(span=9 * HTF_FACTOR, adjust=False).mean()
+    htf_rsi = _rsi(htf_close.fillna(close), 14)
+    out["htf_ret"] = close.pct_change(HTF_FACTOR)
+    out["htf_ema_dist"] = (close - htf_ema) / close
+    out["htf_rsi"] = htf_rsi
+    out["htf_align"] = np.sign(out["ema_cross"]) * np.sign(out["htf_ema_dist"])
+
+    high20, low20 = high.rolling(20).max(), low.rolling(20).min()
+    span20 = (high20 - low20).replace(0, np.nan)
+    out["dist_high_20"] = ((high20 - close) / span20).fillna(0.5)
+    out["dist_low_20"] = ((close - low20) / span20).fillna(0.5)
+    out["mean_rev_z"] = ((close - close.rolling(50).mean()) / close.rolling(50).std().replace(0, np.nan)).fillna(0)
+    # Undefined on a constant series (zero variance); no autocorrelation then.
+    out["autocorr_10"] = out["ret_1"].rolling(10).corr(out["ret_1"].shift()).fillna(0)
+
+    out["session_london"] = ((utc_hour >= 7) & (utc_hour < 16)).astype(int)
+    out["session_ny"] = ((utc_hour >= 12) & (utc_hour < 21)).astype(int)
+    out["session_overlap"] = ((utc_hour >= 12) & (utc_hour < 16)).astype(int)
+    out["dow"] = df.index.dayofweek
     return out[FEATURE_COLUMNS].replace([np.inf, -np.inf], np.nan)
 
 

@@ -1,50 +1,58 @@
 {
-  "samples": 1444,
-  "overall_accuracy_pct": 52.49,
-  "always_majority_baseline_pct": 50.0,
-  "up_rate_pct": 50.0,
+  "samples": 2486,
+  "overall_accuracy_pct": 51.09,
+  "always_majority_baseline_pct": 51.73,
+  "up_rate_pct": 48.27,
+  "breakeven_accuracy_pct": 55.56,
   "by_confidence": [
     {
       "min_confidence": 0.5,
-      "signals": 1444,
+      "signals": 2486,
       "coverage_pct": 100.0,
-      "accuracy_pct": 52.49
+      "accuracy_pct": 51.09,
+      "roi_pct_per_trade": -8.05
     },
     {
       "min_confidence": 0.55,
-      "signals": 842,
-      "coverage_pct": 58.31,
-      "accuracy_pct": 55.11
+      "signals": 361,
+      "coverage_pct": 14.52,
+      "accuracy_pct": 54.85,
+      "roi_pct_per_trade": -1.27
     },
     {
       "min_confidence": 0.6,
-      "signals": 404,
-      "coverage_pct": 27.98,
-      "accuracy_pct": 54.46
+      "signals": 100,
+      "coverage_pct": 4.02,
+      "accuracy_pct": 49.0,
+      "roi_pct_per_trade": -11.8
     },
     {
       "min_confidence": 0.65,
-      "signals": 168,
-      "coverage_pct": 11.63,
-      "accuracy_pct": 58.33
+      "signals": 36,
+      "coverage_pct": 1.45,
+      "accuracy_pct": 47.22,
+      "roi_pct_per_trade": -15.0
     },
     {
       "min_confidence": 0.7,
-      "signals": 68,
-      "coverage_pct": 4.71,
-      "accuracy_pct": 61.76
+      "signals": 20,
+      "coverage_pct": 0.8,
+      "accuracy_pct": 60.0,
+      "roi_pct_per_trade": 8.0
     },
     {
       "min_confidence": 0.75,
-      "signals": 15,
-      "coverage_pct": 1.04,
-      "accuracy_pct": 73.33
+      "signals": 12,
+      "coverage_pct": 0.48,
+      "accuracy_pct": 83.33,
+      "roi_pct_per_trade": 50.0
     },
     {
       "min_confidence": 0.8,
-      "signals": 4,
+      "signals": 7,
       "coverage_pct": 0.28,
-      "accuracy_pct": 50.0
+      "accuracy_pct": 85.71,
+      "roi_pct_per_trade": 54.29
     }
   ]
 }

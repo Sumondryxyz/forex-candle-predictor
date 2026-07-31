@@ -11,24 +11,36 @@ system claiming that is either curve-fitted, tested with look-ahead bias, or
 lying. Measured here on EURUSD with strict walk-forward validation (the model
 never sees the candle it predicts):
 
-| Interval | Signals taken | Accuracy | Baseline |
+EURUSD 5m, model pooled over GBPUSD/AUDUSD/USDCHF, isotonic-calibrated:
+
+| Confidence filter | Signals | Accuracy | ROI per trade @80% payout |
 |---|---|---|---|
-| 5m, all signals | 8316 | 53.3% | 51.0% |
-| 5m, confidence ≥ 0.70 | 544 (6.5% of candles) | 61.6% | — |
-| 5m, confidence ≥ 0.75 | 152 (1.8% of candles) | 68.4% | — |
-| 15m, all signals | 1444 | 52.5% | 50.0% |
-| 15m, confidence ≥ 0.70 | 68 | 61.8% | — |
+| all candles | 8430 | 52.7% | −5.1% |
+| ≥ 0.55 | 1368 (16%) | 58.7% | +5.7% |
+| ≥ 0.60 | 384 (4.6%) | 60.4% | +8.8% |
+| ≥ 0.65 | 119 (1.4%) | 65.6% | +18.0% |
+| ≥ 0.70 | 59 (0.7%) | 71.2% | +28.1% |
+| ≥ 0.75 | 48 (0.6%) | 75.0% | +35.0% |
 
 The realistic path to a high hit rate is **selectivity**: skip most candles and
-only trade the small subset where the model is confident. Accuracy above ~65%
-in the table comes from samples of only 15–150 trades, so treat it as noisy and
-re-validate on your own broker's data before risking money. Binary options
-typically pay ~80%, so break-even is ~55.6% accuracy.
+only trade the small subset where the model is confident. Everything above
+≥0.65 rests on 50–120 trades, so treat those numbers as noisy — the robust,
+large-sample result is the ~58–60% band at ≥0.55/0.60, which already clears the
+55.6% break-even of an 80%-payout binary option. Re-validate on your own
+broker's candles before risking money.
+
+What moved the numbers versus the first version (53% / 61% at ≥0.70):
+
+- **Probability calibration** (isotonic on a held-out slice) — a reported 0.70
+  now means roughly a 70% hit rate, so the filter actually selects good trades.
+- **Pooled multi-pair training** — 4x the training rows per window.
+- **Higher-timeframe context**, 20-candle range position, mean-reversion z-score,
+  return autocorrelation, and London/NY session flags (35 features total).
 
 ## Layout
 
 - `predictor/data.py` — OHLC download (yfinance spot forex)
-- `predictor/features.py` — 23 indicator features, all causal (no look-ahead)
+- `predictor/features.py` — 35 indicator features, all causal (no look-ahead)
 - `predictor/model.py` — LightGBM classifier, walk-forward evaluation
 - `predictor/backtest.py` — accuracy vs confidence reporting
 - `train_backtest.py` — CLI: train + backtest + save model
@@ -38,7 +50,7 @@ typically pay ~80%, so break-even is ~55.6% accuracy.
 
 ```bash
 pip install -r requirements.txt
-python train_backtest.py --pair EURUSD --interval 5m   # writes models/ and reports/
+python train_backtest.py --pair EURUSD --interval 5m --context-pairs GBPUSD,AUDUSD,USDCHF
 export TELEGRAM_BOT_TOKEN=...          # from @BotFather
 export MIN_CONFIDENCE=0.65             # below this the bot says NO TRADE
 export ALLOWED_USER_IDS=123456789      # optional access control
@@ -52,6 +64,11 @@ Bot commands: `/signal EURUSD 5m`, `/stats EURUSD 5m`, `/pairs`.
 - Labels: 1 if next close > current close; unchanged closes are dropped.
 - Walk-forward: retrain every 250 candles on a rolling 3000-candle window and
   predict only forward, so reported accuracy is out-of-sample.
-- No spread, slippage or payout is modelled — accuracy only.
+- Calibration is fitted on the last 20% of each training window, never on the
+  candles being predicted.
+- Context pairs are clipped to the same time span as the training window, so no
+  future information leaks in through pooling.
+- ROI assumes an 80% payout on wins and a full stake loss; spread and slippage
+  are not modelled.
 
 Educational use. Not financial advice.

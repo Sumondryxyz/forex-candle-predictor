@@ -9,6 +9,7 @@ import joblib
 import lightgbm as lgb
 import numpy as np
 import pandas as pd
+from sklearn.calibration import CalibratedClassifierCV
 
 from .features import FEATURE_COLUMNS, build_dataset, build_features
 
@@ -41,17 +42,36 @@ class Prediction:
         return self.confidence >= 0.6
 
 
-def train(X: pd.DataFrame, y: pd.Series) -> lgb.LGBMClassifier:
-    model = lgb.LGBMClassifier(**PARAMS)
-    model.fit(X, y)
-    return model
+def train(X: pd.DataFrame, y: pd.Series, calibrate: bool = True):
+    """Fit the classifier, optionally wrapping it in an isotonic calibrator.
+
+    Calibration matters here because signals are filtered on confidence: an
+    uncalibrated 0.70 score does not mean a 70% hit rate.
+    """
+    base = lgb.LGBMClassifier(**PARAMS)
+    if not calibrate or len(X) < 800 or y.nunique() < 2:
+        base.fit(X, y)
+        return base
+    cutoff = int(len(X) * 0.8)
+    base.fit(X.iloc[:cutoff], y.iloc[:cutoff])
+    calibrated = CalibratedClassifierCV(base, method="isotonic", cv="prefit")
+    calibrated.fit(X.iloc[cutoff:], y.iloc[cutoff:])
+    return calibrated
+
+
+def train_pooled(datasets: list[tuple[pd.DataFrame, pd.Series]], calibrate: bool = True):
+    """Train one model on several pairs at once for a larger, more robust sample."""
+    X = pd.concat([d[0] for d in datasets])
+    y = pd.concat([d[1] for d in datasets])
+    order = X.index.argsort()
+    return train(X.iloc[order], y.iloc[order], calibrate=calibrate)
 
 
 def model_path(pair: str, interval: str) -> Path:
     return MODEL_DIR / f"{pair.upper()}_{interval}.joblib"
 
 
-def save(model: lgb.LGBMClassifier, pair: str, interval: str, metrics: dict) -> Path:
+def save(model, pair: str, interval: str, metrics: dict) -> Path:
     MODEL_DIR.mkdir(parents=True, exist_ok=True)
     path = model_path(pair, interval)
     joblib.dump({"model": model, "features": FEATURE_COLUMNS, "metrics": metrics}, path)
@@ -81,16 +101,31 @@ def predict_latest(bundle: dict, df: pd.DataFrame) -> Prediction:
 
 
 def walk_forward(
-    df: pd.DataFrame, train_size: int = 3000, step: int = 250
+    df: pd.DataFrame,
+    train_size: int = 3000,
+    step: int = 250,
+    calibrate: bool = True,
+    context: list[pd.DataFrame] | None = None,
 ) -> pd.DataFrame:
-    """Retrain periodically and predict only on data the model has never seen."""
+    """Retrain periodically and predict only on data the model has never seen.
+
+    ``context`` holds other pairs whose candles are pooled into each training
+    window (restricted to the same time span) to enlarge the training sample.
+    """
     X, y = build_dataset(df)
+    extra = [build_dataset(other) for other in (context or [])]
     if len(X) <= train_size + step:
         train_size = max(int(len(X) * 0.6), 200)
         step = max(int(len(X) * 0.1), 50)
     rows = []
     for start in range(train_size, len(X) - 1, step):
-        model = train(X.iloc[start - train_size : start], y.iloc[start - train_size : start])
+        window = [(X.iloc[start - train_size : start], y.iloc[start - train_size : start])]
+        lo, hi = window[0][0].index[0], window[0][0].index[-1]
+        for xo, yo in extra:
+            mask = (xo.index >= lo) & (xo.index <= hi)
+            if mask.sum():
+                window.append((xo[mask], yo[mask]))
+        model = train_pooled(window, calibrate=calibrate)
         block = X.iloc[start : start + step]
         prob = model.predict_proba(block)[:, 1]
         rows.append(

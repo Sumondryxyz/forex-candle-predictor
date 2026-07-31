@@ -14,7 +14,7 @@ import os
 from telegram import Update
 from telegram.ext import Application, CommandHandler, ContextTypes
 
-from predictor import model
+from predictor import backtest, model
 from predictor.data import PAIRS, fetch_ohlc
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
@@ -22,6 +22,7 @@ log = logging.getLogger(__name__)
 
 DEFAULT_INTERVAL = os.getenv("DEFAULT_INTERVAL", "5m")
 MIN_CONFIDENCE = float(os.getenv("MIN_CONFIDENCE", "0.60"))
+PAYOUT = float(os.getenv("PAYOUT", "0.80"))
 ALLOWED_USER_IDS = {int(x) for x in os.getenv("ALLOWED_USER_IDS", "").replace(" ", "").split(",") if x}
 
 DISCLAIMER = (
@@ -67,10 +68,12 @@ async def signal(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
     verdict = "TRADE" if pred.confidence >= MIN_CONFIDENCE else "NO TRADE (low confidence)"
     arrow = "\U0001f7e2 UP" if pred.direction == "UP" else "\U0001f534 DOWN"
+    edge = backtest.roi_pct(pred.confidence, PAYOUT)
     await update.message.reply_text(
         f"*{pair} {interval}*\n"
         f"Next candle: {arrow}\n"
         f"Confidence: {pred.confidence * 100:.1f}%\n"
+        f"Expected value at {PAYOUT * 100:.0f}% payout: {edge:+.1f}% per trade\n"
         f"Decision: {verdict}\n"
         f"Last closed candle: {pred.timestamp}\n\n{DISCLAIMER}",
         parse_mode="Markdown",
@@ -90,10 +93,18 @@ async def stats(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         f"Overall accuracy: {metrics['overall_accuracy_pct']}%",
         f"Baseline: {metrics['always_majority_baseline_pct']}%",
         "",
-        "min conf | signals | accuracy",
+        (
+            f"Break-even at {PAYOUT * 100:.0f}% payout: "
+            f"{100 * backtest.breakeven_accuracy(PAYOUT):.1f}%"
+        ),
+        "",
+        "min conf | signals | accuracy | roi/trade",
     ]
     for row in metrics.get("by_confidence", []):
-        lines.append(f"{row['min_confidence']:.2f} | {row['signals']} | {row['accuracy_pct']}%")
+        lines.append(
+            f"{row['min_confidence']:.2f} | {row['signals']} | "
+            f"{row['accuracy_pct']}% | {row.get('roi_pct_per_trade')}%"
+        )
     await update.message.reply_text("\n".join(lines), parse_mode="Markdown")
 
 
