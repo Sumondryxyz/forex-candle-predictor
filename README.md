@@ -31,7 +31,9 @@ Settings, all optional:
 | `PAIR` | `EURUSD` | any Quotex asset, e.g. `EURUSD_otc` |
 | `PERIOD` | `60` | candle seconds: 60 = 1m, 300 = 5m |
 | `MIN_CONF` | `0.60` | below this the signal prints as `skip` |
-| `HISTORY_HOURS` | `24` | how much history to train on |
+| `HISTORY_HOURS` | `72` | how much history to train on |
+| `RETRAIN_EVERY` | `60` | retrain after this many new candles |
+| `PAYOUT` | `0.80` | broker payout, used for the ROI figure |
 | `QUOTEX_HOST` | `market-qx.trade` | change if your account uses another domain |
 
 Sample output:
@@ -63,10 +65,13 @@ trade only the small subset where the model is confident. Everything above
 ~58–60% band at ≥0.55/0.60, which already clears the 55.6% break-even of an
 80%-payout binary option.
 
-`quotex_signals.py` uses a deliberately light logistic regression (numpy only,
-so nothing has to compile on a phone) trained on the pair's own recent history.
-Expect roughly 55–60% live. Trade a demo account until your own WIN/LOSS count
-says otherwise.
+`quotex_signals.py` is numpy-only so nothing has to compile on a phone: 22
+causal features, a bagged ensemble of logistic regressions, probabilities
+calibrated on a held-out tail of the history, and a retrain every
+`RETRAIN_EVERY` candles. On startup it prints a walk-forward hit rate measured
+on candles the model never trained on — that number, not the in-sample one, is
+what to trust. Expect roughly 55–60% live. Trade a demo account until your own
+WIN/LOSS count says otherwise.
 
 ## How the Quotex connection works
 
