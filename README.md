@@ -1,17 +1,53 @@
-# Forex next-candle predictor
+# Quotex next-candle predictor
 
-Telegram bot that predicts the direction of the **next candle** for forex pairs
-(binary/Quotex-style UP/DOWN), with a walk-forward backtest that reports the
-accuracy it actually achieves — not a marketing number.
+Terminal tool that reads **live candles from your own Quotex account** and
+prints an UP/DOWN prediction for the next candle, with a confidence figure and
+a WIN/LOSS check once that candle closes. It never places a trade.
+
+Runs on a phone (Termux) — which is also the only way it works, because
+Cloudflare blocks Quotex logins from datacenter IPs.
+
+## Quick start (Termux)
+
+```bash
+pkg update -y && pkg install python git python-numpy -y
+pip install "git+https://github.com/cleitonleonel/pyquotex.git"
+git clone https://github.com/Sumondryxyz/forex-candle-predictor.git
+cd forex-candle-predictor
+
+export QUOTEX_EMAIL='you@example.com'
+export QUOTEX_PASSWORD='yourpassword'      # single quotes: $ and # break in double quotes
+
+python quotex_candles.py    # live broker candles, one line each
+python quotex_signals.py    # UP/DOWN + confidence, then WIN/LOSS per candle
+```
+
+Put the two `export` lines in `~/.bashrc` so they survive a Termux restart.
+
+Settings, all optional:
+
+| Variable | Default | Meaning |
+|---|---|---|
+| `PAIR` | `EURUSD` | any Quotex asset, e.g. `EURUSD_otc` |
+| `PERIOD` | `60` | candle seconds: 60 = 1m, 300 = 5m |
+| `MIN_CONF` | `0.60` | below this the signal prints as `skip` |
+| `HISTORY_HOURS` | `24` | how much history to train on |
+| `QUOTEX_HOST` | `market-qx.trade` | change if your account uses another domain |
+
+Sample output:
+
+```
+17:12:00  SIGNAL UP (CALL)  conf 63.4%
+    -> WIN (close 1.15195)
+17:13:00  skip  (DOWN 54.1%)
+```
 
 ## Honest accuracy statement
 
 Nobody achieves 80–90% accuracy on next-candle direction in a live market. Any
 system claiming that is either curve-fitted, tested with look-ahead bias, or
-lying. Measured here on EURUSD with strict walk-forward validation (the model
-never sees the candle it predicts):
-
-EURUSD 5m, model pooled over GBPUSD/AUDUSD/USDCHF, isotonic-calibrated:
+lying. With strict walk-forward validation (the model never sees the candle it
+predicts) on EURUSD 5m, pooled over GBPUSD/AUDUSD/USDCHF and calibrated:
 
 | Confidence filter | Signals | Accuracy | ROI per trade @80% payout |
 |---|---|---|---|
@@ -20,61 +56,23 @@ EURUSD 5m, model pooled over GBPUSD/AUDUSD/USDCHF, isotonic-calibrated:
 | ≥ 0.60 | 384 (4.6%) | 60.4% | +8.8% |
 | ≥ 0.65 | 119 (1.4%) | 65.6% | +18.0% |
 | ≥ 0.70 | 59 (0.7%) | 71.2% | +28.1% |
-| ≥ 0.75 | 48 (0.6%) | 75.0% | +35.0% |
 
 The realistic path to a high hit rate is **selectivity**: skip most candles and
-only trade the small subset where the model is confident. Everything above
-≥0.65 rests on 50–120 trades, so treat those numbers as noisy — the robust,
-large-sample result is the ~58–60% band at ≥0.55/0.60, which already clears the
-55.6% break-even of an 80%-payout binary option. Re-validate on your own
-broker's candles before risking money.
+trade only the small subset where the model is confident. Everything above
+≥0.65 rests on 50–120 trades, so treat it as noisy; the robust result is the
+~58–60% band at ≥0.55/0.60, which already clears the 55.6% break-even of an
+80%-payout binary option.
 
-What moved the numbers versus the first version (53% / 61% at ≥0.70):
+`quotex_signals.py` uses a deliberately light logistic regression (numpy only,
+so nothing has to compile on a phone) trained on the pair's own recent history.
+Expect roughly 55–60% live. Trade a demo account until your own WIN/LOSS count
+says otherwise.
 
-- **Probability calibration** (isotonic on a held-out slice) — a reported 0.70
-  now means roughly a 70% hit rate, so the filter actually selects good trades.
-- **Pooled multi-pair training** — 4x the training rows per window.
-- **Higher-timeframe context**, 20-candle range position, mean-reversion z-score,
-  return autocorrelation, and London/NY session flags (35 features total).
+## How the Quotex connection works
 
-### 1-minute timeframe (Quotex-style trading)
-
-EURUSD 1m, same pooled + calibrated setup, 1773 out-of-sample candles:
-
-| Confidence filter | Signals | Accuracy | ROI per trade @80% payout |
-|---|---|---|---|
-| all candles | 1773 | 55.0% | −1.0% |
-| ≥ 0.55 | 453 (26%) | 58.5% | +5.3% |
-| ≥ 0.60 | 185 (10%) | 59.5% | +7.0% |
-| ≥ 0.70 | 63 (3.6%) | 63.5% | +14.3% |
-
-yfinance only keeps 7 days of 1m history, so the 1m sample is small — re-run
-training regularly to keep the model on recent data.
-
-## Quotex usage
-
-Quotex has no official API, and unofficial trading clients violate its terms and
-risk account bans, so this project **does not place trades**. It sends a signal
-a few seconds before each candle closes and you enter manually:
-
-```bash
-python train_backtest.py --pair EURUSD --interval 1m --context-pairs GBPUSD,AUDUSD,USDCHF
-MIN_CONFIDENCE=0.60 TELEGRAM_BOT_TOKEN=... python bot.py
-```
-
-### Quotex candles instead of Yahoo (optional, unofficial)
-
-By default candles come from Yahoo Finance, which lags real time by 15–60s and
-does not carry Quotex's OTC pairs. `DATA_SOURCE=quotex` switches to the broker's
-own WebSocket via the community `pyquotex` client:
-
-```bash
-pip install "git+https://github.com/cleitonleonel/pyquotex.git"   # needs Python >= 3.12
-export DATA_SOURCE=quotex QUOTEX_EMAIL=... QUOTEX_PASSWORD=... QUOTEX_ACCOUNT=PRACTICE
-```
-
-Two client bugs are patched in `predictor/quotex_session.py` (without them the
-socket always answers `authorization/reject`):
+The community `pyquotex` client does not connect to current accounts as-is;
+`predictor/quotex_session.py` patches two things, without which the socket
+always answers `authorization/reject`:
 
 - Quotex sets `laravel_session` twice during login — guest first, then
   authenticated — and pyquotex forwards both, so the server sees a guest. Only
@@ -82,98 +80,46 @@ socket always answers `authorization/reject`):
 - The socket session is no longer in `window.settings`; it comes from the
   authenticated `/api/v1/cabinets/digest` endpoint.
 
-Accounts are served from `market-qx.trade`, not `qxbroker.com`; override with
-`QUOTEX_HOST` if yours differs.
-
 Caveats, all verified the hard way:
 
 - This is **not an official API** and using it breaks Quotex's terms; accounts
-  can be banned. Read-only candle access is all this project does — it never
-  places a trade.
+  can be banned. This project only reads candles — it never places a trade.
 - Cloudflare blocks the login from datacenter IPs (HTTP 403 / endless "verify
   you are human"), so it only works from a home or mobile connection. It is
   therefore untested in CI; it was verified by hand from a phone on Termux.
 - Passwords containing `$` or `#` need single quotes in the shell, otherwise
   the shell eats part of them and Quotex answers "Invalid email or password".
+- A stale cached session makes login silently reuse a dead token: delete
+  `session.json` and rerun.
 - If your browser is already logged in, dump its cookies to a JSON file with
   `cookies`, `token` and `user_agent` keys and point `QUOTEX_SESSION_FILE` at
   it to skip the password login.
 
-Then in Telegram: `/auto EURUSD 1m`. The bot only messages when confidence
-clears `MIN_CONFIDENCE`, states the entry time in UTC, and stays silent while
-the forex market is closed (weekends). `/stop` cancels it.
+## Bigger model (needs a PC or a Termux build toolchain)
 
-## Running on Android (Termux)
-
-No PC needed — and a phone's mobile IP is exactly what the Quotex feed needs to
-get past Cloudflare. LightGBM has no Android wheels, so the model automatically
-falls back to scikit-learn's `HistGradientBoostingClassifier` when the import
-fails (measured accuracy is within ~1 point: 57.4% at ≥0.55, 58.6% at ≥0.60).
-
-### Quotex candles straight from the phone (verified working)
-
-Only numpy is needed, so nothing has to be compiled:
-
-```bash
-pkg update -y && pkg install python git python-numpy -y
-pip install "git+https://github.com/cleitonleonel/pyquotex.git"
-git clone https://github.com/Sumondryxyz/forex-candle-predictor.git
-cd forex-candle-predictor
-export QUOTEX_EMAIL='you@example.com'
-export QUOTEX_PASSWORD='yourpassword'
-
-python quotex_candles.py    # live broker candles, one line each
-python quotex_signals.py    # UP/DOWN + confidence, then WIN/LOSS per candle
-```
-
-`PAIR=EURUSD_otc`, `PERIOD=300` (5m) and `MIN_CONF=0.65` tune the signal run.
-`quotex_signals.py` trains a small logistic regression on the pair's own recent
-history — deliberately light so it runs on a phone; expect roughly 55–60% live,
-not the 80–90% the internet promises.
-
-If login fails with a stale token, delete the cached `session.json` first.
-
-### Full model with Telegram
-
-```bash
-pkg update && pkg install python git python-numpy build-essential -y
-pip install pandas scikit-learn yfinance joblib "python-telegram-bot[job-queue]"
-git clone https://github.com/Sumondryxyz/forex-candle-predictor.git
-cd forex-candle-predictor
-python train_backtest.py --pair EURUSD --interval 1m --context-pairs GBPUSD,AUDUSD
-export TELEGRAM_BOT_TOKEN=...
-python bot.py
-```
-
-Keep it alive in the background with `termux-wake-lock` and run the bot under
-`nohup python bot.py &` so Android does not suspend it.
-
-## Layout
-
-- `predictor/data.py` — OHLC download (yfinance spot forex)
-- `predictor/sources/` — pluggable candle feeds (`DATA_SOURCE=yfinance|quotex`)
-- `predictor/features.py` — 35 indicator features, all causal (no look-ahead)
-- `predictor/model.py` — LightGBM (or scikit-learn) classifier, walk-forward evaluation
-- `predictor/backtest.py` — accuracy vs confidence reporting
-- `train_backtest.py` — CLI: train + backtest + save model
-- `predictor/scheduler.py` — candle-close alignment and forex market hours
-- `bot.py` — Telegram interface
-- `quotex_candles.py` / `quotex_signals.py` — terminal-only Quotex tools
-- `predictor/quotex_session.py` — login/cookie fixes for the unofficial client
-
-## Usage
+The `predictor/` package holds the full research pipeline: 35 causal features,
+pooled multi-pair training, isotonic calibration and walk-forward backtesting.
+It needs pandas/scikit-learn, so it is meant for a PC.
 
 ```bash
 pip install -r requirements.txt
 python train_backtest.py --pair EURUSD --interval 5m --context-pairs GBPUSD,AUDUSD,USDCHF
-export TELEGRAM_BOT_TOKEN=...          # from @BotFather
-export MIN_CONFIDENCE=0.65             # below this the bot says NO TRADE
-export ALLOWED_USER_IDS=123456789      # optional access control
-python bot.py
+python train_backtest.py --pair EURUSD --interval 1m --source quotex
 ```
 
-Bot commands: `/signal EURUSD 1m`, `/auto EURUSD 1m`, `/stop`,
-`/stats EURUSD 1m`, `/pairs`.
+Reports land in `reports/`, models in `models/`.
+
+## Layout
+
+- `quotex_candles.py` — print live broker candles
+- `quotex_signals.py` — live UP/DOWN signals (numpy only)
+- `predictor/quotex_session.py` — login/cookie fixes for the unofficial client
+- `predictor/sources/` — pluggable candle feeds (`DATA_SOURCE=yfinance|quotex`)
+- `predictor/features.py` — 35 indicator features, all causal (no look-ahead)
+- `predictor/model.py` — LightGBM (or scikit-learn) classifier, walk-forward
+- `predictor/backtest.py` — accuracy vs confidence reporting
+- `predictor/scheduler.py` — candle-close alignment and forex market hours
+- `train_backtest.py` — CLI: train + backtest + save model
 
 ## Methodology
 
