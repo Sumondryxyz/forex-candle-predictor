@@ -1,14 +1,14 @@
-"""Optional Quotex candle source (unofficial, use at your own risk).
+"""Quotex candle source (unofficial, use at your own risk).
 
 Quotex publishes no API. This module talks to the broker through the community
 ``pyquotex`` client, which reverse-engineers the site's WebSocket. Using it
-breaks Quotex's terms of service and can get an account banned, so it is
-opt-in: set ``DATA_SOURCE=quotex``.
+breaks Quotex's terms of service and can get an account banned.
 
 Cloudflare blocks logins from datacenter IPs, so this only works when the bot
-runs from a residential connection. If a browser session is already logged in,
-export its cookies to ``QUOTEX_SESSION_FILE`` (JSON with ``cookies``, ``token``
-and ``user_agent``) and no password is needed.
+runs from a residential connection (or through a residential proxy set via
+``QUOTEX_PROXY``). If a browser session is already logged in, export its cookies
+to ``QUOTEX_SESSION_FILE`` (JSON with ``cookies``, ``token`` and ``user_agent``)
+and no password is needed.
 """
 from __future__ import annotations
 
@@ -75,7 +75,7 @@ async def _download(pair: str, interval: str, candles: int) -> list[dict]:
 
 
 def fetch_ohlc(pair: str, interval: str = "1m", days: int | None = None) -> pd.DataFrame:
-    """Same contract as ``predictor.data.fetch_ohlc``, backed by Quotex."""
+    """Return OHLC candles indexed by UTC timestamp, same shape the engine expects."""
     period = interval_seconds(interval)
     candles = int((days or 7) * 86400 / period)
     rows = asyncio.run(_download(pair, interval, candles))

@@ -155,6 +155,8 @@ class QuotexFeed:
             "updated": datetime.fromtimestamp(updated, tz=timezone.utc).isoformat() if updated else None,
             "candles": len(candles),
             "walk_forward": walk,
+            "payout": self.payout,
+            "min_conf": self.min_conf,
             "session": {
                 "signals": len(results),
                 "wins": sum(results),

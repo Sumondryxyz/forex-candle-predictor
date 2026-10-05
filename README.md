@@ -51,26 +51,22 @@ have to run the terminal scripts:
 
 ```bash
 pip install -r requirements.txt
+pip install "git+https://github.com/cleitonleonel/pyquotex.git"
+export QUOTEX_EMAIL='you@example.com' QUOTEX_PASSWORD='yourpassword'
 python -m predictor.webapp            # http://127.0.0.1:5000
 PORT=12000 python -m predictor.webapp # custom port
 ```
 
 Open the page, pick a pair and interval, and it shows the latest UP/DOWN signal
 (direction, confidence, tradeable flag, a sparkline of the last 60 candles and
-the next candle open time) plus a one-click walk-forward backtest with the
-accuracy-vs-confidence table. Nothing is ever traded.
+the next candle open time) plus a one-click walk-forward backtest. Nothing is
+ever traded.
 
-The server reads candles through the same pluggable source as the CLI. Two
-sources are offered in the UI dropdown:
-
-- **yfinance** (default) — works from any IP, good for backtesting.
-- **Quotex (live)** — the real broker feed. Needs `pyquotex` installed
-  (`pip install "git+https://github.com/cleitonleonel/pyquotex.git"`) and
-  `QUOTEX_EMAIL` / `QUOTEX_PASSWORD` set, and only works from a home or mobile
-  connection because Cloudflare blocks the login from datacenter IPs. The web
-  app starts one background poller per pair/interval, retrains as candles close
-  and reports a WIN/LOSS session count; if the login is blocked it shows the
-  error and retries with a backoff instead of crashing.
+The web app uses **only the live Quotex feed** — there is no yfinance fallback.
+Each pair/interval gets one background poller (`QuotexFeed`) that logs in,
+loads history, trains the numpy engine, then retrains as candles close and keeps
+a WIN/LOSS session count. If the login is blocked it shows the error and retries
+with a backoff instead of crashing.
 
 Useful environment variables:
 
@@ -79,27 +75,23 @@ Useful environment variables:
 | `PORT` / `HOST` | `5000` / `0.0.0.0` | bind address |
 | `WEB_PAIRS` | EURUSD,GBPUSD,USDJPY,AUDUSD,USDCHF,USDCAD | pairs offered in the dropdown |
 | `WEB_INTERVALS` | 1m,5m,15m | intervals offered |
-| `WEB_MAX_CANDLES` | 5000 | history cap per request (yfinance path) |
-| `WEB_TRAIN_SIZE` / `WEB_STEP` | 2000 / 500 | walk-forward window and step |
-| `WEB_SIGNAL_TTL` / `WEB_BACKTEST_TTL` | 120 / 1800 | result cache seconds |
-| `MIN_CONF` | 0.60 | Quotex feed: skip signals below this confidence |
-| `PAYOUT` | 0.80 | Quotex feed: payout used for the walk-forward ROI |
-| `HISTORY_HOURS` | 72 | Quotex feed: history to train on |
-| `RETRAIN_EVERY` | 60 | Quotex feed: retrain after this many new candles |
+| `MIN_CONF` | 0.60 | skip signals below this confidence |
+| `PAYOUT` | 0.80 | payout used for the walk-forward ROI |
+| `HISTORY_HOURS` | 72 | history to train on |
+| `RETRAIN_EVERY` | 60 | retrain after this many new candles |
 | `QUOTEX_ACCOUNT` | PRACTICE | `PRACTICE` or `REAL` |
 | `QUOTEX_SESSION_FILE` | — | optional browser cookies JSON to skip the login |
 | `QUOTEX_PROXY` | — | optional residential proxy (`http://user:pass@host:port`) for datacenter hosts |
 
 HTTP API, for scripts or a frontend of your own:
 
-- `GET /api/signals?pair=EURUSD&interval=5m` (yfinance)
-- `GET /api/signals?pair=EURUSD&interval=5m&source=quotex` (alias of `/api/live`)
-- `GET /api/live?pair=EURUSD&interval=1m` (Quotex background feed)
-- `GET /api/backtest?pair=EURUSD&interval=5m`
+- `GET /api/signals?pair=EURUSD&interval=5m` (live Quotex feed)
+- `GET /api/live?pair=EURUSD&interval=1m` (alias of `/api/signals`)
+- `GET /api/backtest?pair=EURUSD&interval=5m` (the feed's walk-forward check)
 - `GET /api/config`, `GET /api/health`
 
-The default yfinance source works from a datacenter IP where the Quotex login is
-blocked; the `quotex` source still needs a residential connection.
+Like the CLI, the web app needs a residential connection: Cloudflare blocks the
+Quotex login from datacenter IPs.
 
 ## Honest accuracy statement
 
@@ -180,7 +172,7 @@ Reports land in `reports/`, models in `models/`.
 - `predictor/webapp.py` — Flask web app + JSON API
 - `predictor/templates/index.html` — dashboard page
 - `predictor/quotex_session.py` — login/cookie fixes for the unofficial client
-- `predictor/sources/` — pluggable candle feeds (`DATA_SOURCE=yfinance|quotex`)
+- `predictor/sources/` — the Quotex candle feed used by `train_backtest.py`
 - `predictor/features.py` — 35 indicator features, all causal (no look-ahead)
 - `predictor/model.py` — LightGBM (or scikit-learn) classifier, walk-forward
 - `predictor/backtest.py` — accuracy vs confidence reporting

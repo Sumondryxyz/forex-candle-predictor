@@ -1,23 +1,13 @@
 import pandas as pd
-import pytest
 
-from predictor import data
 from predictor.sources import get_fetcher
 from predictor.sources import quotex as quotex_source
 
 
-def test_default_source_is_yfinance():
-    assert get_fetcher() is data.fetch_ohlc
-    assert get_fetcher("yfinance") is data.fetch_ohlc
-
-
-def test_quotex_source_is_selectable():
+def test_quotex_is_the_only_source():
+    assert get_fetcher() is quotex_source.fetch_ohlc
     assert get_fetcher("quotex") is quotex_source.fetch_ohlc
-
-
-def test_unknown_source_is_rejected():
-    with pytest.raises(ValueError, match="unknown DATA_SOURCE"):
-        get_fetcher("mt5")
+    assert get_fetcher("whatever") is quotex_source.fetch_ohlc
 
 
 def test_quotex_payload_is_normalised(monkeypatch):
@@ -25,6 +15,7 @@ def test_quotex_payload_is_normalised(monkeypatch):
         {"time": 1704067200, "open": 1.10, "high": 1.11, "low": 1.09, "close": 1.105, "ticks": 7},
         {"time": 1704067260, "open": 1.105, "high": 1.12, "low": 1.10, "close": 1.115, "ticks": 9},
     ]
+
     async def fake_download(pair, interval, candles):
         return rows
 
