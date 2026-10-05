@@ -13,7 +13,6 @@ and no password is needed.
 from __future__ import annotations
 
 import asyncio
-import json
 import os
 import time
 from pathlib import Path
@@ -50,7 +49,7 @@ def _client():
     )
     client.set_account_mode(os.getenv("QUOTEX_ACCOUNT", "PRACTICE"))
     if SESSION_FILE:
-        session = json.loads(Path(SESSION_FILE).read_text())
+        session = quotex_session.load_session(SESSION_FILE, os.getenv("QUOTEX_EMAIL"))
         client.set_session(
             user_agent=session["user_agent"],
             cookies=session.get("cookies"),

@@ -150,10 +150,12 @@ function renderLive(d) {
     $('signal-body').innerHTML = `
       <div class="signal">${pill}</div>
       <p class="note">Quotex feed error: <span class="err">${d.error}</span></p>
-      <p class="note">Cloudflare blocks Quotex logins from datacenter IPs. Run the web app
-      from a home or mobile connection (Termux), with <code>QUOTEX_EMAIL</code> and
-      <code>QUOTEX_PASSWORD</code> set, or point <code>QUOTEX_PROXY</code> at a
-      residential proxy. It retries automatically.</p>`;
+      <p class="note">Cloudflare blocks the Quotex <b>login page</b> from datacenter IPs,
+      but the trading websocket itself is reachable. Easiest fix: log in from a browser on a
+      home or mobile connection, export that session and set
+      <code>QUOTEX_SESSION_FILE</code>; or run the app from that connection with
+      <code>QUOTEX_EMAIL</code>/<code>QUOTEX_PASSWORD</code>, or set
+      <code>QUOTEX_PROXY</code> to a residential proxy. It retries automatically.</p>`;
     return;
   }
   if (!d.direction) {

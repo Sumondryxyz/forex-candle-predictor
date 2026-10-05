@@ -15,7 +15,6 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
-import json
 import os
 import threading
 import time
@@ -53,9 +52,12 @@ def _friendly_error(exc: Exception) -> str:
     low = text.lower()
     if "403" in text or "reason_phrase" in low or "cloudflare" in low or "just a moment" in low:
         return (
-            "Cloudflare blocked the Quotex login (HTTP 403). This is expected from a "
-            "datacenter IP; run the web app from a home or mobile connection, or set "
-            f"QUOTEX_PROXY to a residential proxy ({type(exc).__name__})."
+            "Cloudflare blocked the Quotex login page (HTTP 403), which is expected "
+            "from a datacenter IP. Easiest fix: log in from a browser on a home/mobile "
+            "connection, export the session and set QUOTEX_SESSION_FILE to skip the "
+            "login page (the websocket itself is reachable). Or run the web app from "
+            "that home/mobile connection, or set QUOTEX_PROXY to a residential proxy. "
+            f"({type(exc).__name__})"
         )
     if "invalid email or password" in low:
         return "Quotex rejected the credentials; check QUOTEX_EMAIL / QUOTEX_PASSWORD."
@@ -119,7 +121,7 @@ class QuotexFeed:
         client.set_account_mode(self.account)
         session_file = os.getenv("QUOTEX_SESSION_FILE", "")
         if session_file:
-            session = json.loads(Path(session_file).read_text())
+            session = quotex_session.load_session(session_file, os.getenv("QUOTEX_EMAIL"))
             client.set_session(
                 user_agent=session["user_agent"],
                 cookies=session.get("cookies"),

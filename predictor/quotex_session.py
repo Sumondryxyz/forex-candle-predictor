@@ -13,13 +13,43 @@ Accounts are also served from ``market-qx.trade`` rather than ``qxbroker.com``.
 """
 from __future__ import annotations
 
+import json
 import os
 import re
+from pathlib import Path
 from typing import Any
 
 DEFAULT_HOST = os.getenv("QUOTEX_HOST", "market-qx.trade")
 _TOKEN_RE = re.compile(r'"?token"?\s*[:=]\s*"([A-Za-z0-9]{32,})"')
 _applied = False
+
+
+def load_session(path: str, email: str | None = None) -> dict[str, Any]:
+    """Read a Quotex browser session so the bot can skip the blocked login page.
+
+    Accepts either pyquotex's own ``session.json`` layout, which is keyed by
+    email (``{"you@example.com": {"cookies": ..., "token": ..., "user_agent": ...}}``),
+    or a flat ``{"cookies": ..., "token": ..., "user_agent": ...}`` dict. When
+    ``email`` is given and present as a key, that entry is used.
+
+    The websocket authenticates with the token, so a token is required. The
+    cookies (in particular ``cf_clearance``) and the user agent must match the
+    browser that created the session, otherwise Cloudflare rejects the handshake.
+    """
+    data = json.loads(Path(path).read_text())
+    if not isinstance(data, dict):
+        raise TypeError(f"session file {path!r} is not a JSON object")
+    if email and isinstance(data.get(email), dict):
+        data = data[email]
+    if not data.get("token"):
+        raise ValueError(
+            f"session file {path!r} has no 'token'; export cookies, token and user_agent"
+        )
+    if not data.get("user_agent"):
+        from pyquotex.config import USER_AGENT
+
+        data = {**data, "user_agent": USER_AGENT}
+    return data
 
 
 def _get_cookies(self) -> str:

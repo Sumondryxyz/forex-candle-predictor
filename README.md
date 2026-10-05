@@ -145,9 +145,18 @@ Caveats, all verified the hard way:
   the shell eats part of them and Quotex answers "Invalid email or password".
 - A stale cached session makes login silently reuse a dead token: delete
   `session.json` and rerun.
-- If your browser is already logged in, dump its cookies to a JSON file with
-  `cookies`, `token` and `user_agent` keys and point `QUOTEX_SESSION_FILE` at
-  it to skip the password login.
+- The HTML login page is behind Cloudflare, but the **websocket endpoint itself
+  is reachable** from datacenter IPs — only the login page is blocked. So if you
+  can get a valid session, the feed connects from anywhere.
+- If your browser (or phone) is already logged in, export its session to a JSON
+  file and point `QUOTEX_SESSION_FILE` at it to skip the password login. Two
+  layouts are accepted: pyquotex's own `session.json`, keyed by email
+  (`{"you@example.com": {"cookies": "...", "token": "...", "user_agent": "..."}}`),
+  or a flat `{"cookies": ..., "token": ..., "user_agent": ...}` object. The
+  `token` is what the websocket authenticates with; `cookies` and `user_agent`
+  must match the browser that created the session (Cloudflare binds the
+  handshake to them). Grab the token from `/api/v1/cabinets/digest` while logged
+  in, or from the page's `window.settings` object.
 
 ## Bigger model (needs a PC or a Termux build toolchain)
 
