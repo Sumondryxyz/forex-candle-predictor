@@ -26,27 +26,39 @@ import threading
 from flask import Flask, jsonify, render_template, request
 
 from .quotex_live import QuotexFeed
+from .tradingview_live import TradingViewFeed
 
 DEFAULT_PAIRS = ["EURUSD", "GBPUSD", "USDJPY", "AUDUSD", "USDCHF", "USDCAD"]
 DEFAULT_INTERVALS = ["1m", "5m", "15m"]
+
+SOURCES = {"tradingview": TradingViewFeed, "quotex": QuotexFeed}
+DEFAULT_SOURCE = os.getenv("DATA_SOURCE", "tradingview").lower()
 
 
 class InputError(ValueError):
     """A request parameter the server refuses to act on."""
 
 
-# One background Quotex poller per (pair, interval), created on first request.
-_feeds: dict[tuple[str, str], QuotexFeed] = {}
+# One background poller per (source, pair, interval), created on first request.
+_feeds: dict[tuple[str, str, str], object] = {}
 _feeds_lock = threading.Lock()
 
 
-def get_feed(pair: str, interval: str) -> QuotexFeed:
+def _resolve_source(name: str | None = None) -> str:
+    source = (name or DEFAULT_SOURCE).lower()
+    if source not in SOURCES:
+        raise InputError(f"unknown source {source!r}; use one of {sorted(SOURCES)}")
+    return source
+
+
+def get_feed(pair: str, interval: str, source: str | None = None):
+    source = _resolve_source(source)
     pair, interval = _validate(pair, interval)
-    key = (pair, interval)
+    key = (source, pair, interval)
     with _feeds_lock:
         feed = _feeds.get(key)
         if feed is None:
-            feed = QuotexFeed(pair, interval)
+            feed = SOURCES[source](pair, interval)
             feed.start()
             _feeds[key] = feed
         return feed
@@ -70,18 +82,19 @@ def _validate(pair: str, interval: str) -> tuple[str, str]:
     return pair, interval
 
 
-def compute_signals(pair: str, interval: str) -> dict:
-    """Latest signal from the background Quotex feed (starts it if needed)."""
-    return get_feed(pair, interval).snapshot()
+def compute_signals(pair: str, interval: str, source: str | None = None) -> dict:
+    """Latest signal from the background feed (starts it if needed)."""
+    return get_feed(pair, interval, source).snapshot()
 
 
-def compute_backtest(pair: str, interval: str) -> dict:
+def compute_backtest(pair: str, interval: str, source: str | None = None) -> dict:
     """The feed's own walk-forward check on the history it trained on."""
     pair, interval = _validate(pair, interval)
-    snap = get_feed(pair, interval).snapshot()
+    snap = get_feed(pair, interval, source).snapshot()
     return {
         "pair": pair,
         "interval": interval,
+        "source": snap["source"],
         "status": snap["status"],
         "error": snap["error"],
         "candles": snap["candles"],
@@ -96,24 +109,63 @@ def create_app() -> Flask:
 
     @app.get("/")
     def index():
-        return render_template("index.html", pairs=_pairs(), intervals=_intervals())
+        return render_template(
+            "index.html", pairs=_pairs(), intervals=_intervals(), sources=sorted(SOURCES),
+            default_source=DEFAULT_SOURCE,
+        )
 
     @app.get("/api/health")
     def health():
-        return jsonify({"status": "ok", "source": "quotex"})
+        return jsonify({"status": "ok", "source": DEFAULT_SOURCE})
 
     @app.get("/api/config")
     def config():
-        return jsonify({"pairs": _pairs(), "intervals": _intervals(), "source": "quotex"})
+        return jsonify(
+            {
+                "pairs": _pairs(),
+                "intervals": _intervals(),
+                "sources": sorted(SOURCES),
+                "default_source": DEFAULT_SOURCE,
+            }
+        )
 
     @app.get("/api/signals")
     @app.get("/api/live")
     def signals():
-        """Live Quotex feed: starts a background poller on first request."""
+        """Live feed: starts a background poller on first request."""
         pair = request.args.get("pair", "EURUSD")
         interval = request.args.get("interval", "5m")
+        source = request.args.get("source")
         try:
-            return jsonify(compute_signals(pair, interval))
+            return jsonify(compute_signals(pair, interval, source))
+        except InputError as exc:
+            return jsonify({"error": str(exc)}), 400
+
+    @app.get("/api/candles")
+    def candles_view():
+        """Raw closed candles for external (e.g. AI) analysis."""
+        pair = request.args.get("pair", "EURUSD")
+        interval = request.args.get("interval", "5m")
+        source = request.args.get("source")
+        try:
+            limit = max(1, min(int(request.args.get("limit", 500)), 5000))
+        except ValueError:
+            return jsonify({"error": "limit must be an integer"}), 400
+        try:
+            feed = get_feed(pair, interval, source)
+            rows = feed.candles(limit)
+            snap = feed.snapshot()
+            return jsonify(
+                {
+                    "pair": pair.upper(),
+                    "interval": interval,
+                    "source": snap["source"],
+                    "status": snap["status"],
+                    "error": snap["error"],
+                    "count": len(rows),
+                    "candles": rows,
+                }
+            )
         except InputError as exc:
             return jsonify({"error": str(exc)}), 400
 
@@ -121,8 +173,9 @@ def create_app() -> Flask:
     def backtest_view():
         pair = request.args.get("pair", "EURUSD")
         interval = request.args.get("interval", "5m")
+        source = request.args.get("source")
         try:
-            return jsonify(compute_backtest(pair, interval))
+            return jsonify(compute_backtest(pair, interval, source))
         except InputError as exc:
             return jsonify({"error": str(exc)}), 400
 

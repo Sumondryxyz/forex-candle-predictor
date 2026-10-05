@@ -1,11 +1,16 @@
-# Quotex next-candle predictor
+# Forex next-candle predictor
 
-Terminal tool that reads **live candles from your own Quotex account** and
-prints an UP/DOWN prediction for the next candle, with a confidence figure and
-a WIN/LOSS check once that candle closes. It never places a trade.
+Reads **live candles** and prints an UP/DOWN prediction for the next candle, with
+a confidence figure and a WIN/LOSS check once that candle closes. It never places
+a trade.
 
-Runs on a phone (Termux) — which is also the only way it works, because
-Cloudflare blocks Quotex logins from datacenter IPs.
+Two data sources are supported: **TradingView** (default — the public chart
+websocket, no login, works from any host) and **Quotex** (your own account via the
+unofficial `pyquotex` client). There is also a Flask web app.
+
+The Quotex path runs on a phone (Termux) — a home/mobile connection is needed
+because Cloudflare blocks Quotex logins from datacenter IPs. The TradingView path
+has no such restriction.
 
 ## Quick start (Termux)
 
@@ -51,28 +56,40 @@ have to run the terminal scripts:
 
 ```bash
 pip install -r requirements.txt
-pip install "git+https://github.com/cleitonleonel/pyquotex.git"
-export QUOTEX_EMAIL='you@example.com' QUOTEX_PASSWORD='yourpassword'
 python -m predictor.webapp            # http://127.0.0.1:5000
 PORT=12000 python -m predictor.webapp # custom port
 ```
 
-Open the page, pick a pair and interval, and it shows the latest UP/DOWN signal
-(direction, confidence, tradeable flag, a sparkline of the last 60 candles and
-the next candle open time) plus a one-click walk-forward backtest. Nothing is
+Open the page, pick a source, pair and interval, and it shows the latest UP/DOWN
+signal (direction, confidence, tradeable flag, a sparkline of the last 60 candles
+and the next candle open time) plus a one-click walk-forward backtest. Nothing is
 ever traded.
 
-The web app uses **only the live Quotex feed** — there is no yfinance fallback.
-Each pair/interval gets one background poller (`QuotexFeed`) that logs in,
-loads history, trains the numpy engine, then retrains as candles close and keeps
-a WIN/LOSS session count. If the login is blocked it shows the error and retries
-with a backoff instead of crashing.
+### Data sources
+
+Pick the source from the dropdown (or `DATA_SOURCE=...`):
+
+- **tradingview** (default) — reads candles from TradingView's public chart
+  websocket. No login, no account, and **not blocked from datacenter IPs**, so it
+  works out of the box. Unofficial/undocumented and outside TradingView's terms;
+  it only reads candles.
+- **quotex** — the broker's own feed through `pyquotex`. Same pairs and payouts
+  the bot trades, but Cloudflare challenges the login page from datacenter IPs, so
+  it needs a home/mobile connection, a residential proxy (`QUOTEX_PROXY`), or an
+  exported browser session (`QUOTEX_SESSION_FILE`). See the Quotex section below.
+
+Each source+pair+interval gets one background poller (`TradingViewFeed` /
+`QuotexFeed`, both built on `predictor/feed.py`) that loads history, trains the
+numpy engine, then retrains as candles close and keeps a WIN/LOSS session count.
+If a source fails it shows the error and retries with a backoff instead of
+crashing.
 
 Useful environment variables:
 
 | Variable | Default | Meaning |
 |---|---|---|
 | `PORT` / `HOST` | `5000` / `0.0.0.0` | bind address |
+| `DATA_SOURCE` | tradingview | default source (`tradingview` or `quotex`) |
 | `WEB_PAIRS` | EURUSD,GBPUSD,USDJPY,AUDUSD,USDCHF,USDCAD | pairs offered in the dropdown |
 | `WEB_INTERVALS` | 1m,5m,15m | intervals offered |
 | `MIN_CONF` | 0.60 | skip signals below this confidence |
@@ -85,13 +102,15 @@ Useful environment variables:
 
 HTTP API, for scripts or a frontend of your own:
 
-- `GET /api/signals?pair=EURUSD&interval=5m` (live Quotex feed)
-- `GET /api/live?pair=EURUSD&interval=1m` (alias of `/api/signals`)
+- `GET /api/signals?pair=EURUSD&interval=5m&source=tradingview` (live feed)
+- `GET /api/live?...` (alias of `/api/signals`)
+- `GET /api/candles?pair=EURUSD&interval=5m&limit=500` (raw OHLCV for your own
+  analysis, e.g. feeding an LLM)
 - `GET /api/backtest?pair=EURUSD&interval=5m` (the feed's walk-forward check)
 - `GET /api/config`, `GET /api/health`
 
-Like the CLI, the web app needs a residential connection: Cloudflare blocks the
-Quotex login from datacenter IPs.
+The default TradingView source needs no connection setup. The Quotex source needs
+a residential connection: Cloudflare blocks the Quotex login from datacenter IPs.
 
 ## Honest accuracy statement
 
@@ -167,7 +186,8 @@ It needs pandas/scikit-learn, so it is meant for a PC.
 ```bash
 pip install -r requirements.txt
 python train_backtest.py --pair EURUSD --interval 5m --context-pairs GBPUSD,AUDUSD,USDCHF
-python train_backtest.py --pair EURUSD --interval 1m --source quotex
+python train_backtest.py --pair EURUSD --interval 1m                 # tradingview (default)
+python train_backtest.py --pair EURUSD --interval 1m --source quotex  # broker feed
 ```
 
 Reports land in `reports/`, models in `models/`.
@@ -177,11 +197,13 @@ Reports land in `reports/`, models in `models/`.
 - `quotex_candles.py` — print live broker candles
 - `quotex_signals.py` — live UP/DOWN signals (numpy only)
 - `predictor/engine.py` — numpy-only features/training/walk-forward, shared by the CLI and web app
-- `predictor/quotex_live.py` — background Quotex feed for the web app
+- `predictor/feed.py` — `BaseFeed`: shared background poller/trainer/retrainer
+- `predictor/tradingview_live.py` — background TradingView feed (default)
+- `predictor/quotex_live.py` — background Quotex feed
 - `predictor/webapp.py` — Flask web app + JSON API
 - `predictor/templates/index.html` — dashboard page
 - `predictor/quotex_session.py` — login/cookie fixes for the unofficial client
-- `predictor/sources/` — the Quotex candle feed used by `train_backtest.py`
+- `predictor/sources/` — TradingView (default) and Quotex candle feeds for `train_backtest.py`
 - `predictor/features.py` — 35 indicator features, all causal (no look-ahead)
 - `predictor/model.py` — LightGBM (or scikit-learn) classifier, walk-forward
 - `predictor/backtest.py` — accuracy vs confidence reporting

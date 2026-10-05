@@ -82,10 +82,16 @@
 <div class="wrap">
   <header>
     <h1>Forex Candle Predictor</h1>
-    <span class="sub">live Quotex feed &middot; next-candle UP/DOWN signal &middot; never places trades</span>
+    <span class="sub">live TradingView / Quotex feed &middot; next-candle UP/DOWN signal &middot; never places trades</span>
   </header>
 
   <div class="controls">
+    <div>
+      <label for="source">Source</label>
+      <select id="source">
+        {% for s in sources %}<option value="{{ s }}"{% if s == default_source %} selected{% endif %}>{{ s }}</option>{% endfor %}
+      </select>
+    </div>
     <div>
       <label for="pair">Pair</label>
       <select id="pair">
@@ -149,18 +155,18 @@ function renderLive(d) {
   if (d.error) {
     $('signal-body').innerHTML = `
       <div class="signal">${pill}</div>
-      <p class="note">Quotex feed error: <span class="err">${d.error}</span></p>
-      <p class="note">Cloudflare blocks the Quotex <b>login page</b> from datacenter IPs,
-      but the trading websocket itself is reachable. Easiest fix: log in from a browser on a
-      home or mobile connection, export that session and set
-      <code>QUOTEX_SESSION_FILE</code>; or run the app from that connection with
-      <code>QUOTEX_EMAIL</code>/<code>QUOTEX_PASSWORD</code>, or set
-      <code>QUOTEX_PROXY</code> to a residential proxy. It retries automatically.</p>`;
+      <p class="note">Feed error: <span class="err">${d.error}</span></p>
+      <p class="note">If this is the <b>quotex</b> source: Cloudflare blocks the Quotex
+      <b>login page</b> from datacenter IPs. Switch Source to <b>tradingview</b> (no login
+      needed, reads the same pairs), or run from a home/mobile connection with
+      <code>QUOTEX_EMAIL</code>/<code>QUOTEX_PASSWORD</code>, export a session to
+      <code>QUOTEX_SESSION_FILE</code>, or set <code>QUOTEX_PROXY</code>. It retries
+      automatically.</p>`;
     return;
   }
   if (!d.direction) {
     $('signal-body').innerHTML = `<div class="signal">${pill}</div>
-      <p class="note">Loading Quotex history and training the model...</p>`;
+      <p class="note">Loading ${d.source} history and training the model...</p>`;
     return;
   }
 
@@ -201,7 +207,7 @@ function renderLive(d) {
       <div><div class="k">session W/L</div>${sess}</div>
       <div><div class="k">next candle opens</div>${new Date(d.next_candle_open).toISOString().slice(11,19)}Z</div>
     </div>
-    <p class="note">Live Quotex feed, auto-refreshing. Probability of an up-close:
+    <p class="note">Live ${d.source} feed, auto-refreshing. Probability of an up-close:
     ${(d.probability*100).toFixed(1)}%. Signals are only printed once confidence clears
     ${d.min_conf}.</p>`;
 }
@@ -209,7 +215,7 @@ function renderLive(d) {
 function renderBacktest(d) {
   const wf = d.walk_forward;
   if (d.error) {
-    $('backtest-body').innerHTML = `<p class="note">Quotex feed error:
+    $('backtest-body').innerHTML = `<p class="note">${d.source} feed error:
       <span class="err">${d.error}</span></p>`;
     return;
   }
@@ -242,12 +248,12 @@ function stopLive() {
 }
 
 async function pollLive() {
-  const pair = $('pair').value, interval = $('interval').value;
+  const pair = $('pair').value, interval = $('interval').value, source = $('source').value;
   $('signal-err').textContent = '';
   try {
-    const d = await getJSON(`/api/live?pair=${pair}&interval=${interval}`);
+    const d = await getJSON(`/api/live?pair=${pair}&interval=${interval}&source=${source}`);
     renderLive(d);
-    setStatus(d.error ? 'quotex error' : (d.status === 'live' ? 'live' : d.status));
+    setStatus(d.error ? `${source} error` : (d.status === 'live' ? 'live' : d.status));
   } catch (e) {
     $('signal-err').textContent = e.message;
     setStatus('error');
@@ -256,7 +262,7 @@ async function pollLive() {
 
 async function loadSignal() {
   stopLive();
-  const pair = $('pair').value, interval = $('interval').value;
+  const source = $('source').value;
   $('signal-err').textContent = '';
   $('go').disabled = true; setStatus('starting live feed...');
   await pollLive();
@@ -265,11 +271,11 @@ async function loadSignal() {
 }
 
 async function loadBacktest() {
-  const pair = $('pair').value, interval = $('interval').value;
+  const pair = $('pair').value, interval = $('interval').value, source = $('source').value;
   $('backtest-err').textContent = '';
   $('bt').disabled = true; setStatus('running backtest...');
   try {
-    renderBacktest(await getJSON(`/api/backtest?pair=${pair}&interval=${interval}`));
+    renderBacktest(await getJSON(`/api/backtest?pair=${pair}&interval=${interval}&source=${source}`));
     setStatus('backtest ready');
   } catch (e) {
     $('backtest-err').textContent = e.message;
