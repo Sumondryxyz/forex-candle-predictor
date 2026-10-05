@@ -39,12 +39,14 @@ def _client():
         ) from exc
 
     quotex_session.apply(HOST)
+    proxy = os.getenv("QUOTEX_PROXY", "").strip()
     client = Quotex(
         email=os.getenv("QUOTEX_EMAIL", ""),
         password=os.getenv("QUOTEX_PASSWORD", ""),
         lang="en",
         host=HOST,
         root_path=ROOT_PATH,
+        proxies={"http": proxy, "https": proxy} if proxy else None,
     )
     client.set_account_mode(os.getenv("QUOTEX_ACCOUNT", "PRACTICE"))
     if SESSION_FILE:
@@ -66,7 +68,7 @@ async def _download(pair: str, interval: str, candles: int) -> list[dict]:
         period = interval_seconds(interval)
         rows = await client.get_candles(pair.upper(), time.time(), candles * period, period)
     finally:
-        client.close()
+        await client.close()
     if not rows:
         raise RuntimeError(f"Quotex returned no candles for {pair} {interval}")
     return rows

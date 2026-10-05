@@ -60,28 +60,46 @@ Open the page, pick a pair and interval, and it shows the latest UP/DOWN signal
 the next candle open time) plus a one-click walk-forward backtest with the
 accuracy-vs-confidence table. Nothing is ever traded.
 
-The server reads candles through the same pluggable source as the CLI, so
-`DATA_SOURCE=quotex` switches it to the broker feed. Useful environment
-variables:
+The server reads candles through the same pluggable source as the CLI. Two
+sources are offered in the UI dropdown:
+
+- **yfinance** (default) — works from any IP, good for backtesting.
+- **Quotex (live)** — the real broker feed. Needs `pyquotex` installed
+  (`pip install "git+https://github.com/cleitonleonel/pyquotex.git"`) and
+  `QUOTEX_EMAIL` / `QUOTEX_PASSWORD` set, and only works from a home or mobile
+  connection because Cloudflare blocks the login from datacenter IPs. The web
+  app starts one background poller per pair/interval, retrains as candles close
+  and reports a WIN/LOSS session count; if the login is blocked it shows the
+  error and retries with a backoff instead of crashing.
+
+Useful environment variables:
 
 | Variable | Default | Meaning |
 |---|---|---|
 | `PORT` / `HOST` | `5000` / `0.0.0.0` | bind address |
 | `WEB_PAIRS` | EURUSD,GBPUSD,USDJPY,AUDUSD,USDCHF,USDCAD | pairs offered in the dropdown |
 | `WEB_INTERVALS` | 1m,5m,15m | intervals offered |
-| `WEB_MAX_CANDLES` | 5000 | history cap per request |
+| `WEB_MAX_CANDLES` | 5000 | history cap per request (yfinance path) |
 | `WEB_TRAIN_SIZE` / `WEB_STEP` | 2000 / 500 | walk-forward window and step |
 | `WEB_SIGNAL_TTL` / `WEB_BACKTEST_TTL` | 120 / 1800 | result cache seconds |
+| `MIN_CONF` | 0.60 | Quotex feed: skip signals below this confidence |
+| `PAYOUT` | 0.80 | Quotex feed: payout used for the walk-forward ROI |
+| `HISTORY_HOURS` | 72 | Quotex feed: history to train on |
+| `RETRAIN_EVERY` | 60 | Quotex feed: retrain after this many new candles |
+| `QUOTEX_ACCOUNT` | PRACTICE | `PRACTICE` or `REAL` |
+| `QUOTEX_SESSION_FILE` | — | optional browser cookies JSON to skip the login |
+| `QUOTEX_PROXY` | — | optional residential proxy (`http://user:pass@host:port`) for datacenter hosts |
 
 HTTP API, for scripts or a frontend of your own:
 
-- `GET /api/signals?pair=EURUSD&interval=5m`
+- `GET /api/signals?pair=EURUSD&interval=5m` (yfinance)
+- `GET /api/signals?pair=EURUSD&interval=5m&source=quotex` (alias of `/api/live`)
+- `GET /api/live?pair=EURUSD&interval=1m` (Quotex background feed)
 - `GET /api/backtest?pair=EURUSD&interval=5m`
 - `GET /api/config`, `GET /api/health`
 
-The web app uses yfinance by default, so it works from a datacenter IP where the
-Quotex login is blocked. The `quotex` source still needs a residential
-connection.
+The default yfinance source works from a datacenter IP where the Quotex login is
+blocked; the `quotex` source still needs a residential connection.
 
 ## Honest accuracy statement
 
@@ -157,6 +175,8 @@ Reports land in `reports/`, models in `models/`.
 
 - `quotex_candles.py` — print live broker candles
 - `quotex_signals.py` — live UP/DOWN signals (numpy only)
+- `predictor/engine.py` — numpy-only features/training/walk-forward, shared by the CLI and web app
+- `predictor/quotex_live.py` — background Quotex feed for the web app
 - `predictor/webapp.py` — Flask web app + JSON API
 - `predictor/templates/index.html` — dashboard page
 - `predictor/quotex_session.py` — login/cookie fixes for the unofficial client

@@ -1,0 +1,137 @@
+import asyncio
+
+import numpy as np
+
+from predictor.quotex_live import QuotexFeed
+
+
+def _candles(n: int, start: int = 1_700_000_000, seed: int = 0):
+    rng = np.random.default_rng(seed)
+    close = 1.1 + np.cumsum(rng.normal(0, 1e-4, n))
+    high = close + rng.uniform(0, 2e-4, n)
+    low = close - rng.uniform(0, 2e-4, n)
+    open_ = np.r_[close[0], close[:-1]]
+    return [
+        {
+            "time": start + i * 60,
+            "open": float(open_[i]),
+            "high": float(high[i]),
+            "low": float(low[i]),
+            "close": float(close[i]),
+        }
+        for i in range(n)
+    ]
+
+
+class FakeClient:
+    """Stands in for pyquotex's Quotex: same async surface the feed uses."""
+
+    def __init__(self, rows):
+        self.rows = rows
+        self.closed = False
+        self.connected = False
+
+    async def connect(self):
+        self.connected = True
+        return True, None
+
+    async def get_candles(self, pair, end, count, period):
+        return self.rows
+
+    def close(self):
+        self.closed = True
+
+
+def _bootstrap(feed, rows):
+    client = FakeClient(rows)
+    asyncio.run(feed._bootstrap(client))
+    return client
+
+
+def test_snapshot_is_empty_before_bootstrap():
+    feed = QuotexFeed("EURUSD", "1m")
+    snap = feed.snapshot()
+    assert snap["status"] == "idle"
+    assert snap["direction"] is None
+    assert snap["candles"] == 0
+
+
+def test_bootstrap_trains_and_reports_a_signal():
+    feed = QuotexFeed("EURUSD", "1m")
+    _bootstrap(feed, _candles(1200))
+
+    snap = feed.snapshot()
+    assert snap["status"] == "live"
+    assert snap["error"] is None
+    assert snap["direction"] in {"UP", "DOWN"}
+    assert snap["side"] in {"CALL", "PUT"}
+    assert 0.5 <= snap["confidence"] <= 1.0
+    assert snap["candles"] == 1200
+    assert snap["walk_forward"] is not None
+    assert len(snap["recent"]) == 60
+
+
+def test_ingest_resolves_pending_signal():
+    feed = QuotexFeed("EURUSD", "1m")
+    feed.min_conf = 0.0  # force every candle to become a pending signal
+    history = _candles(1200)
+    _bootstrap(feed, history)
+
+    first = _candles(1, start=1_700_000_000 + 1200 * 60, seed=1)[0]
+    feed._ingest([first])
+    assert feed.snapshot()["pending"]["ref_close"] == first["close"]
+
+    second = _candles(1, start=1_700_000_000 + 1201 * 60, seed=2)[0]
+    feed._ingest([second])
+    session = feed.snapshot()["session"]
+    assert session["signals"] == 1
+    assert session["wins"] in {0, 1}
+    # The just-closed candle immediately opens a new pending signal.
+    assert feed.snapshot()["pending"]["ref_close"] == second["close"]
+
+
+def test_ingest_ignores_duplicate_and_incomplete_candles():
+    feed = QuotexFeed("EURUSD", "1m")
+    _bootstrap(feed, _candles(1200))
+    dup = feed.snapshot()["candles"]
+    feed._ingest([{"time": 1_700_000_000, "open": 1, "high": 1, "low": 1, "close": None}])
+    assert feed.snapshot()["candles"] == dup
+
+
+def test_short_history_raises():
+    feed = QuotexFeed("EURUSD", "1m")
+    try:
+        asyncio.run(feed._bootstrap(FakeClient(_candles(100))))
+    except RuntimeError as exc:
+        assert "history candles" in str(exc)
+    else:  # pragma: no cover - would mean the guard is missing
+        raise AssertionError("expected a RuntimeError for short history")
+
+
+def test_background_thread_reaches_live_then_stops(monkeypatch):
+    import time
+
+    rows = _candles(1200)
+    clients = []
+
+    def factory():
+        client = FakeClient(rows)
+        clients.append(client)
+        return client
+
+    monkeypatch.setenv("QUOTEX_EMAIL", "demo@example.com")
+    monkeypatch.setenv("QUOTEX_PASSWORD", "secret")
+    feed = QuotexFeed("EURUSD", "1m", client_factory=factory)
+    feed.start()
+    try:
+        for _ in range(50):
+            if feed.snapshot()["status"] == "live":
+                break
+            time.sleep(0.1)
+        snap = feed.snapshot()
+        assert snap["status"] == "live"
+        assert snap["direction"] in {"UP", "DOWN"}
+        assert clients and clients[0].connected
+    finally:
+        feed.stop()
+    assert not feed._thread.is_alive()

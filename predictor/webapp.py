@@ -29,6 +29,7 @@ from flask import Flask, jsonify, render_template, request
 
 from . import backtest, model
 from .features import build_dataset
+from .quotex_live import QuotexFeed
 from .scheduler import is_market_open, next_candle_open
 from .sources import get_fetcher
 
@@ -67,6 +68,22 @@ class _Cache:
 
 
 _cache = _Cache()
+
+# One background Quotex poller per (pair, interval), created on first request.
+_feeds: dict[tuple[str, str], QuotexFeed] = {}
+_feeds_lock = threading.Lock()
+
+
+def get_feed(pair: str, interval: str) -> QuotexFeed:
+    pair, interval = _validate(pair, interval)
+    key = (pair, interval)
+    with _feeds_lock:
+        feed = _feeds.get(key)
+        if feed is None:
+            feed = QuotexFeed(pair, interval)
+            feed.start()
+            _feeds[key] = feed
+        return feed
 
 
 def _pairs() -> list[str]:
@@ -180,6 +197,7 @@ def create_app() -> Flask:
             "index.html",
             pairs=_pairs(),
             intervals=_intervals(),
+            default_source=os.getenv("DATA_SOURCE", "yfinance"),
         )
 
     @app.get("/api/health")
@@ -188,18 +206,42 @@ def create_app() -> Flask:
 
     @app.get("/api/config")
     def config():
-        return jsonify({"pairs": _pairs(), "intervals": _intervals()})
+        return jsonify(
+            {
+                "pairs": _pairs(),
+                "intervals": _intervals(),
+                "sources": ["yfinance", "quotex"],
+                "default_source": os.getenv("DATA_SOURCE", "yfinance"),
+            }
+        )
 
     @app.get("/api/signals")
     def signals():
         pair = request.args.get("pair", "EURUSD")
         interval = request.args.get("interval", "5m")
+        source = request.args.get("source", "yfinance").lower()
+        if source == "quotex":
+            # Quotex is served by the background feed; /api/live is the same data.
+            try:
+                return jsonify(get_feed(pair, interval).snapshot())
+            except InputError as exc:
+                return jsonify({"error": str(exc)}), 400
         try:
             return jsonify(compute_signals(pair, interval))
         except InputError as exc:
             return jsonify({"error": str(exc)}), 400
         except Exception as exc:  # noqa: BLE001 - surface upstream failures as JSON
             return jsonify({"error": f"{type(exc).__name__}: {exc}"}), 502
+
+    @app.get("/api/live")
+    def live():
+        """Live Quotex feed: starts a background poller on first request."""
+        pair = request.args.get("pair", "EURUSD")
+        interval = request.args.get("interval", "5m")
+        try:
+            return jsonify(get_feed(pair, interval).snapshot())
+        except InputError as exc:
+            return jsonify({"error": str(exc)}), 400
 
     @app.get("/api/backtest")
     def backtest_view():

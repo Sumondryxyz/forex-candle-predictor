@@ -62,3 +62,18 @@ def test_unsupported_interval_is_rejected(client):
     res = client.get("/api/signals?pair=EURUSD&interval=3m")
     assert res.status_code == 400
     assert "unsupported interval" in res.get_json()["error"]
+
+
+def test_live_route_returns_feed_snapshot(monkeypatch):
+    monkeypatch.setattr(
+        webapp,
+        "get_feed",
+        lambda pair, interval: type(
+            "F", (), {"snapshot": lambda self: {"source": "quotex", "pair": pair, "direction": "UP"}}
+        )(),
+    )
+    app = webapp.create_app()
+    app.testing = True
+    body = app.test_client().get("/api/live?pair=EURUSD&interval=1m").get_json()
+    assert body["source"] == "quotex"
+    assert body["direction"] == "UP"
