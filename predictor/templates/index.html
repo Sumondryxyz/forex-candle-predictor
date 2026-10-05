@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Forex Candle Predictor</title>
+<style>
+  :root {
+    --bg: #0b0f17;
+    --panel: #141b27;
+    --panel-2: #1b2433;
+    --line: #263145;
+    --text: #e6edf7;
+    --muted: #8b9bb4;
+    --up: #22c55e;
+    --down: #ef4444;
+    --accent: #38bdf8;
+    --warn: #f59e0b;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: radial-gradient(1200px 600px at 50% -200px, #17233a 0%, var(--bg) 60%);
+    color: var(--text);
+    font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    min-height: 100vh;
+  }
+  .wrap { max-width: 1040px; margin: 0 auto; padding: 28px 20px 60px; }
+  header { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; margin-bottom: 4px; }
+  h1 { font-size: 22px; margin: 0; letter-spacing: -0.01em; }
+  .sub { color: var(--muted); font-size: 13px; }
+  .controls {
+    display: flex; gap: 12px; align-items: end; flex-wrap: wrap;
+    margin: 20px 0; padding: 16px; background: var(--panel);
+    border: 1px solid var(--line); border-radius: 14px;
+  }
+  label { display: block; font-size: 12px; color: var(--muted); margin-bottom: 6px; }
+  select, button {
+    font: inherit; color: var(--text); background: var(--panel-2);
+    border: 1px solid var(--line); border-radius: 9px; padding: 9px 12px;
+  }
+  button {
+    cursor: pointer; background: var(--accent); color: #04222f;
+    border-color: transparent; font-weight: 600;
+  }
+  button:disabled { opacity: .55; cursor: progress; }
+  button.ghost { background: transparent; color: var(--text); border-color: var(--line); font-weight: 500; }
+  .grid { display: grid; grid-template-columns: 1.1fr 1fr; gap: 16px; }
+  @media (max-width: 760px) { .grid { grid-template-columns: 1fr; } }
+  .card {
+    background: var(--panel); border: 1px solid var(--line);
+    border-radius: 14px; padding: 18px;
+  }
+  .card h2 { margin: 0 0 14px; font-size: 13px; text-transform: uppercase;
+    letter-spacing: .08em; color: var(--muted); font-weight: 600; }
+  .signal { display: flex; align-items: center; gap: 16px; }
+  .badge {
+    font-size: 30px; font-weight: 800; padding: 12px 20px; border-radius: 12px;
+    letter-spacing: -0.02em;
+  }
+  .badge.UP { color: var(--up); background: rgba(34,197,94,.12); border: 1px solid rgba(34,197,94,.35); }
+  .badge.DOWN { color: var(--down); background: rgba(239,68,68,.12); border: 1px solid rgba(239,68,68,.35); }
+  .meta { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 18px; margin-top: 16px; }
+  .meta div { font-size: 13px; }
+  .meta .k { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .05em; }
+  .conf-bar { height: 8px; border-radius: 6px; background: var(--panel-2); overflow: hidden; margin-top: 8px; }
+  .conf-bar > span { display: block; height: 100%; background: linear-gradient(90deg, var(--accent), var(--up)); }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th, td { text-align: right; padding: 7px 8px; border-bottom: 1px solid var(--line); }
+  th:first-child, td:first-child { text-align: left; }
+  th { color: var(--muted); font-weight: 500; font-size: 11px; text-transform: uppercase; letter-spacing: .04em; }
+  tr.hl td { color: var(--up); font-weight: 600; }
+  .note { color: var(--muted); font-size: 12px; line-height: 1.6; margin-top: 14px; }
+  .warn { color: var(--warn); }
+  .err { color: var(--down); font-size: 13px; margin-top: 10px; }
+  .spark { display: flex; align-items: flex-end; gap: 2px; height: 46px; margin-top: 14px; }
+  .spark i { flex: 1; background: var(--line); border-radius: 2px 2px 0 0; min-height: 3px; }
+  .spark i.up { background: var(--up); }
+  .spark i.down { background: var(--down); }
+  .pill { font-size: 11px; padding: 3px 9px; border-radius: 999px; border: 1px solid var(--line); color: var(--muted); }
+  .pill.open { color: var(--up); border-color: rgba(34,197,94,.4); }
+  .pill.closed { color: var(--warn); border-color: rgba(245,158,11,.4); }
+  footer { margin-top: 26px; color: var(--muted); font-size: 12px; text-align: center; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>Forex Candle Predictor</h1>
+    <span class="sub">next-candle UP/DOWN signal &middot; educational, never places trades</span>
+  </header>
+
+  <div class="controls">
+    <div>
+      <label for="pair">Pair</label>
+      <select id="pair">
+        {% for p in pairs %}<option value="{{ p }}">{{ p }}</option>{% endfor %}
+      </select>
+    </div>
+    <div>
+      <label for="interval">Interval</label>
+      <select id="interval">
+        {% for i in intervals %}<option value="{{ i }}"{% if i == '5m' %} selected{% endif %}>{{ i }}</option>{% endfor %}
+      </select>
+    </div>
+    <button id="go">Get signal</button>
+    <button id="bt" class="ghost">Run backtest</button>
+    <span id="status" class="pill">ready</span>
+  </div>
+
+  <div class="grid">
+    <section class="card">
+      <h2>Latest signal</h2>
+      <div id="signal-body"><p class="note">Pick a pair and press "Get signal".</p></div>
+      <div id="signal-err" class="err"></div>
+    </section>
+
+    <section class="card">
+      <h2>Walk-forward backtest</h2>
+      <div id="backtest-body"><p class="note">Press "Run backtest" for out-of-sample accuracy.</p></div>
+      <div id="backtest-err" class="err"></div>
+    </section>
+  </div>
+
+  <footer>
+    Predictions are probabilistic and often below break-even. Demo-trade first. Not financial advice.
+  </footer>
+</div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const pct = (x) => (x * 100).toFixed(1) + '%';
+
+function setStatus(text) { $('status').textContent = text; }
+
+async function getJSON(url) {
+  const res = await fetch(url);
+  const data = await res.json().catch(() => ({ error: 'invalid JSON response' }));
+  if (!res.ok) throw new Error(data.error || ('HTTP ' + res.status));
+  return data;
+}
+
+function renderSignal(d) {
+  const bars = d.recent.map(c => {
+    const up = c.close >= c.open;
+    return `<i class="${up ? 'up' : 'down'}" title="${c.time} O ${c.open} C ${c.close}"></i>`;
+  }).join('');
+  const open = d.market_open
+    ? '<span class="pill open">market open</span>'
+    : '<span class="pill closed">market closed</span>';
+  $('signal-body').innerHTML = `
+    <div class="signal">
+      <div class="badge ${d.direction}">${d.direction}</div>
+      <div>
+        <div class="k">confidence</div>
+        <div style="font-size:20px;font-weight:700">${pct(d.confidence)}</div>
+        <div class="conf-bar"><span style="width:${d.confidence * 100}%"></span></div>
+      </div>
+      <div style="margin-left:auto;text-align:right">
+        ${open}
+        <div class="k" style="margin-top:8px">tradeable</div>
+        <div>${d.tradeable ? 'yes' : 'no (below 0.60)'}</div>
+      </div>
+    </div>
+    <div class="spark">${bars}</div>
+    <div class="meta">
+      <div><div class="k">pair / interval</div>${d.pair} ${d.interval}</div>
+      <div><div class="k">side</div>${d.side}</div>
+      <div><div class="k">last close</div>${d.last_close}</div>
+      <div><div class="k">candles used</div>${d.candles}</div>
+      <div><div class="k">last candle (UTC)</div>${new Date(d.last_candle_time).toISOString().slice(0,19)}Z</div>
+      <div><div class="k">next candle opens</div>${new Date(d.next_candle_open).toISOString().slice(0,19)}Z</div>
+    </div>
+    <p class="note">Probability of an up-close: ${(d.probability*100).toFixed(1)}%. Confidence is the
+    distance from a coin flip, not an expected hit rate.</p>`;
+}
+
+function renderBacktest(d) {
+  const s = d.summary;
+  const rows = d.by_confidence.map(r => {
+    const hl = r.accuracy_pct !== null && r.accuracy_pct > s.breakeven_accuracy_pct ? ' class="hl"' : '';
+    const roi = r.roi_pct_per_trade === null ? '-' : (r.roi_pct_per_trade > 0 ? '+' : '') + r.roi_pct_per_trade + '%';
+    return `<tr${hl}><td>&ge; ${r.min_confidence}</td><td>${r.signals}</td>
+      <td>${r.coverage_pct}%</td><td>${r.accuracy_pct ?? '-'}%</td><td>${roi}</td></tr>`;
+  }).join('');
+  $('backtest-body').innerHTML = `
+    <div class="meta" style="margin-top:0">
+      <div><div class="k">out-of-sample candles</div>${s.samples}</div>
+      <div><div class="k">overall accuracy</div>${s.overall_accuracy_pct}%</div>
+      <div><div class="k">majority baseline</div>${s.always_majority_baseline_pct}%</div>
+      <div><div class="k">break-even</div>${s.breakeven_accuracy_pct}%</div>
+    </div>
+    <table style="margin-top:14px">
+      <thead><tr><th>min conf</th><th>signals</th><th>coverage</th><th>accuracy</th><th>ROI/trade</th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table>
+    <p class="note">Green rows beat the ${(d.payout*100).toFixed(0)}%-payout break-even on out-of-sample data.
+    Small signal counts are noisy.</p>`;
+}
+
+async function loadSignal() {
+  const pair = $('pair').value, interval = $('interval').value;
+  $('signal-err').textContent = '';
+  $('go').disabled = true; setStatus('fetching candles...');
+  try {
+    renderSignal(await getJSON(`/api/signals?pair=${pair}&interval=${interval}`));
+    setStatus('signal ready');
+  } catch (e) {
+    $('signal-err').textContent = e.message;
+    setStatus('error');
+  } finally { $('go').disabled = false; }
+}
+
+async function loadBacktest() {
+  const pair = $('pair').value, interval = $('interval').value;
+  $('backtest-err').textContent = '';
+  $('bt').disabled = true; setStatus('running backtest...');
+  try {
+    renderBacktest(await getJSON(`/api/backtest?pair=${pair}&interval=${interval}`));
+    setStatus('backtest ready');
+  } catch (e) {
+    $('backtest-err').textContent = e.message;
+    setStatus('error');
+  } finally { $('bt').disabled = false; }
+}
+
+$('go').addEventListener('click', loadSignal);
+$('bt').addEventListener('click', loadBacktest);
+loadSignal();
+</script>
+</body>
+</html>

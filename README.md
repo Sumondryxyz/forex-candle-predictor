@@ -44,6 +44,45 @@ Sample output:
 17:13:00  skip  (DOWN 54.1%)
 ```
 
+## Web app
+
+A small Flask dashboard wraps the same pipeline in a browser UI, so you do not
+have to run the terminal scripts:
+
+```bash
+pip install -r requirements.txt
+python -m predictor.webapp            # http://127.0.0.1:5000
+PORT=12000 python -m predictor.webapp # custom port
+```
+
+Open the page, pick a pair and interval, and it shows the latest UP/DOWN signal
+(direction, confidence, tradeable flag, a sparkline of the last 60 candles and
+the next candle open time) plus a one-click walk-forward backtest with the
+accuracy-vs-confidence table. Nothing is ever traded.
+
+The server reads candles through the same pluggable source as the CLI, so
+`DATA_SOURCE=quotex` switches it to the broker feed. Useful environment
+variables:
+
+| Variable | Default | Meaning |
+|---|---|---|
+| `PORT` / `HOST` | `5000` / `0.0.0.0` | bind address |
+| `WEB_PAIRS` | EURUSD,GBPUSD,USDJPY,AUDUSD,USDCHF,USDCAD | pairs offered in the dropdown |
+| `WEB_INTERVALS` | 1m,5m,15m | intervals offered |
+| `WEB_MAX_CANDLES` | 5000 | history cap per request |
+| `WEB_TRAIN_SIZE` / `WEB_STEP` | 2000 / 500 | walk-forward window and step |
+| `WEB_SIGNAL_TTL` / `WEB_BACKTEST_TTL` | 120 / 1800 | result cache seconds |
+
+HTTP API, for scripts or a frontend of your own:
+
+- `GET /api/signals?pair=EURUSD&interval=5m`
+- `GET /api/backtest?pair=EURUSD&interval=5m`
+- `GET /api/config`, `GET /api/health`
+
+The web app uses yfinance by default, so it works from a datacenter IP where the
+Quotex login is blocked. The `quotex` source still needs a residential
+connection.
+
 ## Honest accuracy statement
 
 Nobody achieves 80–90% accuracy on next-candle direction in a live market. Any
@@ -118,6 +157,8 @@ Reports land in `reports/`, models in `models/`.
 
 - `quotex_candles.py` — print live broker candles
 - `quotex_signals.py` — live UP/DOWN signals (numpy only)
+- `predictor/webapp.py` — Flask web app + JSON API
+- `predictor/templates/index.html` — dashboard page
 - `predictor/quotex_session.py` — login/cookie fixes for the unofficial client
 - `predictor/sources/` — pluggable candle feeds (`DATA_SOURCE=yfinance|quotex`)
 - `predictor/features.py` — 35 indicator features, all causal (no look-ahead)
