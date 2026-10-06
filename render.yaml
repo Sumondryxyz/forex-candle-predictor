@@ -1,0 +1,28 @@
+# Render web service (free plan). Docker keeps the build reproducible and lets
+# the same image run on any other host. The image is deliberately slim: the live
+# app needs pandas/scikit-learn, not lightgbm or pyquotex, so those are omitted.
+services:
+  - type: web
+    name: forex-candle-predictor
+    runtime: docker
+    plan: free
+    dockerfilePath: ./deploy/Dockerfile.render
+    dockerContext: .
+    healthCheckPath: /api/health
+    autoDeploy: true
+    envVars:
+      - key: HOST
+        value: 0.0.0.0
+      - key: DATA_SOURCE
+        value: tradingview
+      # 0.60 is where the walk-forward hit rate clears the 80%-payout break-even.
+      - key: MIN_CONF
+        value: "0.60"
+      - key: HISTORY_HOURS
+        value: "72"
+      - key: RETRAIN_EVERY
+        value: "60"
+      - key: WEB_PAIRS
+        value: EURUSD,GBPUSD,USDJPY,AUDUSD,USDCHF,USDCAD
+      - key: WEB_INTERVALS
+        value: 1m,5m,15m

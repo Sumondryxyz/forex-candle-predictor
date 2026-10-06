@@ -45,3 +45,17 @@ places trades. Live data comes from an unofficial TradingView chart websocket
 - Real host: `deploy/forex-predictor.service` (systemd), `deploy/Dockerfile` +
   `deploy/docker-compose.yml` (restart: unless-stopped).
 - Keep exactly one worker in any WSGI setup: feed state is in-process.
+
+## Render deploy
+- `render.yaml` (Blueprint) + `deploy/Dockerfile.render` (slim image:
+  pandas/scikit-learn/flask/websockets/gunicorn only). The live app does NOT
+  need lightgbm or pyquotex, so the image stays small; `requirements-web.txt`
+  is that slim set. `pyquotex` imports are lazy (inside functions), so the
+  webapp imports fine without it.
+- Free plan: 750 shared instance-hours/month; spins down after 15 min without
+  INBOUND traffic. This app is outbound-only, so it sleeps unless pinged.
+  `.github/workflows/keep-awake.yml` pings `/api/health` every 5 min; it needs
+  a repo secret `RENDER_URL`.
+- Build verified with `sudo docker build -f deploy/Dockerfile.render .`; the
+  container boots gunicorn on `$PORT` (default 10000) and serves live signals.
+

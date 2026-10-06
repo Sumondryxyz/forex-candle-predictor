@@ -152,10 +152,29 @@ docker compose -f deploy/docker-compose.yml up -d --build
 
 The container has `restart: unless-stopped` and a healthcheck on `/api/health`.
 
-**A platform (no server of your own).** Push the repo to Render / Railway /
-Fly.io and set the start command to `python -m predictor.webapp`, with `PORT`
-taken from the platform's env var. They keep the process alive and restart it
-for you.
+**Render (free plan, no server of your own).** The repo ships a Blueprint
+(`render.yaml`) and a slim image (`deploy/Dockerfile.render`) that installs only
+what the live app needs. Steps:
+
+1. Push this repo to GitHub (already done if you cloned it from there).
+2. In Render: **New + → Blueprint**, connect the repo, and apply. Render reads
+   `render.yaml`, builds the Docker image, and gives you
+   `https://<name>.onrender.com`. The health check is `/api/health`.
+3. **Keep it awake.** A Render free service spins down after 15 minutes without
+   *inbound* traffic. This app only makes *outbound* TradingView connections, so
+   without a ping the feed sleeps and stops predicting. Add a GitHub repository
+   secret named `RENDER_URL` set to your service URL
+   (e.g. `https://forex-candle-predictor.onrender.com`); the included
+   `.github/workflows/keep-awake.yml` then pings `/api/health` every 5 minutes.
+
+Know the free-plan limits: 750 shared instance-hours per month (one always-on
+service uses ~730, so a second free service would be suspended mid-month), and
+a 30-60s cold start if it ever does sleep. For a service that truly never
+sleeps, use the systemd or Docker route above on a VPS, or Oracle Cloud's
+Always Free VM.
+
+Other platforms (Railway / Fly.io / Koyeb) work the same way: run the image in
+`deploy/Dockerfile.render`, bind `0.0.0.0:$PORT`, and keep one worker.
 
 Two things are worth knowing whichever route you take:
 
