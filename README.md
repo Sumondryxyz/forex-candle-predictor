@@ -112,6 +112,59 @@ HTTP API, for scripts or a frontend of your own:
 The default TradingView source needs no connection setup. The Quotex source needs
 a residential connection: Cloudflare blocks the Quotex login from datacenter IPs.
 
+### Keeping it running 24/7
+
+A plain `python -m predictor.webapp` dies when the terminal closes, when the
+host recycles, or when a dependency disappears. Pick the option that matches
+where you run it.
+
+**This sandbox / a dev box (no init system).** Use the supervisor inside tmux so
+it outlives the shell and restarts the app if it crashes or the environment
+wipes the packages:
+
+```bash
+./scripts/serve_tmux.sh          # start (idempotent), attach: tmux attach -t predictor
+./scripts/serve_tmux.sh stop     # stop
+```
+
+`scripts/run_server.sh` is the supervisor: it re-checks dependencies, restarts
+the app on any exit, and backs off up to 60s. Note the sandbox itself still
+recycles its VM periodically — nothing inside it can survive a full recycle.
+
+**A real server (recommended).** Install the systemd unit in `deploy/`, which
+restarts on crash and starts on boot:
+
+```bash
+sudo cp deploy/forex-predictor.service /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now forex-predictor
+sudo systemctl status forex-predictor
+```
+
+Edit `WorkingDirectory` and the `ExecStart` path in the unit to match your
+checkout, and create a `.venv` with `pip install -r requirements.txt` there.
+
+**Docker (portable).** Build and run with a restart policy:
+
+```bash
+docker compose -f deploy/docker-compose.yml up -d --build
+```
+
+The container has `restart: unless-stopped` and a healthcheck on `/api/health`.
+
+**A platform (no server of your own).** Push the repo to Render / Railway /
+Fly.io and set the start command to `python -m predictor.webapp`, with `PORT`
+taken from the platform's env var. They keep the process alive and restart it
+for you.
+
+Two things are worth knowing whichever route you take:
+
+- The Flask dev server is fine for personal use; for anything public put a real
+  WSGI server in front (`gunicorn -w 1 -k gthread -b 0.0.0.0:$PORT predictor.webapp:create_app()`).
+  Keep one worker: the candle feed lives in process memory.
+- The TradingView feed is unofficial and can be rate-limited; the app already
+  reconnects with backoff, so leave it running rather than restarting often.
+
 ## Honest accuracy statement
 
 Nobody achieves 80–90% accuracy on next-candle direction in a live market. Any

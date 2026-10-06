@@ -1,0 +1,9 @@
+.git
+.venv
+__pycache__
+*.pyc
+reports
+models
+workspace
+conversations
+.agent_tmp

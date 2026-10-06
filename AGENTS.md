@@ -36,3 +36,12 @@ places trades. Live data comes from an unofficial TradingView chart websocket
   (`wss://data.tradingview.com/...`), not a documented data API. Be honest about
   this when asked; it can change without notice and is outside TradingView ToS.
 - The live feed caches history in `predictor/feed.py` (`MAX_CANDLES = 6000`).
+
+## Keeping it running
+- No init/supervisor here (PID 1 is `openhands-agent`, `systemctl` offline,
+  no cron). Processes die on every environment recycle.
+- Sandbox: `./scripts/serve_tmux.sh` runs `scripts/run_server.sh` (a watchdog
+  that reinstalls deps and restarts the app) inside tmux.
+- Real host: `deploy/forex-predictor.service` (systemd), `deploy/Dockerfile` +
+  `deploy/docker-compose.yml` (restart: unless-stopped).
+- Keep exactly one worker in any WSGI setup: feed state is in-process.
