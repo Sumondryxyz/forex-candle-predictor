@@ -90,6 +90,27 @@ def test_ingest_resolves_pending_signal():
     assert feed.snapshot()["pending"]["ref_close"] == second["close"]
 
 
+def test_snapshot_is_json_serialisable_after_resolving_signals():
+    """Regression: numpy bools/int64 in the session must not break jsonify.
+
+    With a strong model most candles clear min_conf, so the pending signal
+    resolves into ``_results``; a raw numpy comparison there used to make
+    ``sum(results)`` an int64 and /api/live returned 500.
+    """
+    import json
+
+    feed = QuotexFeed("EURUSD", "1m")
+    feed.min_conf = 0.0  # force every candle to become a pending signal
+    _bootstrap(feed, _candles(1200))
+
+    for i in range(3):
+        feed._ingest(_candles(1, start=1_700_000_000 + (1200 + i) * 60, seed=i + 1))
+
+    snap = feed.snapshot()
+    assert snap["session"]["signals"] == 2
+    json.dumps(snap)  # would raise TypeError with a numpy scalar
+
+
 def test_ingest_ignores_duplicate_and_incomplete_candles():
     feed = QuotexFeed("EURUSD", "1m")
     _bootstrap(feed, _candles(1200))

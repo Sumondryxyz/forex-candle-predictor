@@ -108,7 +108,7 @@ class BaseFeed:
             "min_conf": self.min_conf,
             "session": {
                 "signals": len(results),
-                "wins": sum(results),
+                "wins": int(sum(results)),
                 "rate": round(100 * sum(results) / len(results), 1) if results else None,
             },
         }
@@ -149,7 +149,7 @@ class BaseFeed:
         if pending:
             out["pending"] = {
                 "direction": pending["dir"],
-                "ref_close": pending["ref_close"],
+                "ref_close": float(pending["ref_close"]),
             }
         return out
 
@@ -185,7 +185,9 @@ class BaseFeed:
 
                 if self._pending:
                     went_up = candle["close"] > self._pending["ref_close"]
-                    self._results.append(went_up == (self._pending["dir"] == "UP"))
+                    # bool()/float() strip numpy scalars, which Flask's jsonify
+                    # cannot serialise (int64 -> 500 on /api/live).
+                    self._results.append(bool(went_up == (self._pending["dir"] == "UP")))
                     self._pending = None
 
             if added and self._model is not None:
