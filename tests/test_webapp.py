@@ -77,7 +77,10 @@ def test_index_renders_dashboard(client):
 
 
 def test_health_and_config_expose_sources(client):
-    assert client.get("/api/health").get_json() == {"status": "ok", "source": "tradingview"}
+    health = client.get("/api/health").get_json()
+    assert health["status"] == "ok"
+    assert health["source"] == "tradingview"
+    assert health["model"] in {"linear", "numpy"}
     body = client.get("/api/config").get_json()
     assert body["default_source"] == "tradingview"
     assert body["sources"] == ["quotex", "tradingview"]

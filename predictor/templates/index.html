@@ -67,6 +67,10 @@
   .conf-bar > span { display: block; height: 100%; background: linear-gradient(90deg, var(--accent), var(--up)); }
   .note { color: var(--muted); font-size: 12px; line-height: 1.6; margin-top: 14px; }
   .warn { color: var(--warn); }
+  .sweep { width: 100%; border-collapse: collapse; margin-top: 16px; font-size: 13px; }
+  .sweep th, .sweep td { padding: 6px 10px; text-align: right; border-bottom: 1px solid var(--border); }
+  .sweep th:first-child, .sweep td:first-child { text-align: left; }
+  .sweep th { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .05em; }
   .err { color: var(--down); font-size: 13px; margin-top: 10px; }
   .spark { display: flex; align-items: flex-end; gap: 2px; height: 46px; margin-top: 14px; }
   .spark i { flex: 1; background: var(--line); border-radius: 2px 2px 0 0; min-height: 3px; }
@@ -226,6 +230,19 @@ function renderBacktest(d) {
   }
   const breakeven = 100 / (1 + (d.payout || 0.8));
   const beats = wf.rate >= breakeven;
+  const sweep = wf.sweep || [];
+  const rows = sweep.map(s => {
+    const rate = s.rate == null ? '—' : `${s.rate.toFixed(1)}%`;
+    const roi = s.roi == null ? '—' : `${s.roi > 0 ? '+' : ''}${s.roi.toFixed(1)}%`;
+    const good = s.rate != null && s.rate >= breakeven;
+    return `<tr>
+      <td>${(s.min_conf * 100).toFixed(0)}%</td>
+      <td>${s.signals}</td>
+      <td>${s.coverage.toFixed(1)}%</td>
+      <td style="color:${good ? '#3fb950' : 'inherit'}">${rate}</td>
+      <td style="color:${good ? '#3fb950' : 'inherit'}">${roi}</td>
+    </tr>`;
+  }).join('');
   $('backtest-body').innerHTML = `
     <div class="meta" style="margin-top:0">
       <div><div class="k">walk-forward signals</div>${wf.signals}</div>
@@ -235,6 +252,9 @@ function renderBacktest(d) {
       <div><div class="k">payout</div>${((d.payout || 0.8) * 100).toFixed(0)}%</div>
       <div><div class="k">break-even</div>${breakeven.toFixed(1)}%</div>
     </div>
+    ${rows ? `<table class="sweep">
+      <thead><tr><th>min conf</th><th>signals</th><th>coverage</th><th>hit rate</th><th>ROI / trade</th></tr></thead>
+      <tbody>${rows}</tbody></table>` : ''}
     <p class="note ${beats ? '' : 'warn'}">Out-of-sample check on the candles the feed
     trained on, at the ${((d.min_conf || 0.6) * 100).toFixed(0)}% confidence filter.
     ${beats ? 'Beats break-even on this sample.' : 'Below break-even here — paper trade first.'}

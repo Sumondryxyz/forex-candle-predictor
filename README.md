@@ -116,30 +116,37 @@ a residential connection: Cloudflare blocks the Quotex login from datacenter IPs
 
 Nobody achieves 80–90% accuracy on next-candle direction in a live market. Any
 system claiming that is either curve-fitted, tested with look-ahead bias, or
-lying. With strict walk-forward validation (the model never sees the candle it
-predicts) on EURUSD 5m, pooled over GBPUSD/AUDUSD/USDCHF and calibrated:
+lying. On one-minute FX the next candle is close to a coin flip, and gradient
+boosted trees actually do *worse* here than a plain regularised linear model:
+trees memorise the noise and sit at ~51%, while the linear model keeps a small,
+real edge once you filter on confidence.
+
+Strict rolling walk-forward on EURUSD 5m (train on a trailing window, predict
+only forward, never see the candle being predicted):
 
 | Confidence filter | Signals | Accuracy | ROI per trade @80% payout |
 |---|---|---|---|
-| all candles | 8430 | 52.7% | −5.1% |
-| ≥ 0.55 | 1368 (16%) | 58.7% | +5.7% |
-| ≥ 0.60 | 384 (4.6%) | 60.4% | +8.8% |
-| ≥ 0.65 | 119 (1.4%) | 65.6% | +18.0% |
-| ≥ 0.70 | 59 (0.7%) | 71.2% | +28.1% |
+| all candles | 2464 | 52.2% | −6.0% |
+| ≥ 0.55 | 1140 (46%) | 55.9% | +0.6% |
+| ≥ 0.60 | 429 (17%) | 58.0% | +4.4% |
+| ≥ 0.65 | 174 (7%) | 55.2% | −0.6% |
+| ≥ 0.70 | 74 (3%) | 55.4% | −0.3% |
 
-The realistic path to a high hit rate is **selectivity**: skip most candles and
-trade only the small subset where the model is confident. Everything above
-≥0.65 rests on 50–120 trades, so treat it as noisy; the robust result is the
-~58–60% band at ≥0.55/0.60, which already clears the 55.6% break-even of an
-80%-payout binary option.
+The realistic path to a higher hit rate is **selectivity**: skip most candles
+and take only the subset where the model is confident. The robust result is the
+~56–58% band at ≥0.55/0.60, which clears the 55.6% break-even of an 80%-payout
+binary option. The ≥0.65/0.70 buckets rest on fewer trades and swing around, so
+treat them as noisy — the dashboard now prints this whole sweep so you can judge
+it yourself. GBPUSD 15m behaves similarly (58.5% at ≥0.60 over 634 trades).
 
-`quotex_signals.py` is numpy-only so nothing has to compile on a phone: 22
-causal features, a bagged ensemble of logistic regressions, probabilities
-calibrated on a held-out tail of the history, and a retrain every
-`RETRAIN_EVERY` candles. On startup it prints a walk-forward hit rate measured
-on candles the model never trained on — that number, not the in-sample one, is
-what to trust. Expect roughly 55–60% live. Trade a demo account until your own
-WIN/LOSS count says otherwise.
+The engine picks its backend automatically: **linear** (35 causal features, a
+regularised logistic regression) when pandas + scikit-learn are importable, and
+a **numpy** fallback (22 causal features, a bagged logistic ensemble calibrated
+on a held-out tail) so nothing has to compile on a phone. Either way it retrains
+every `RETRAIN_EVERY` candles and prints a walk-forward hit rate measured on
+candles it never trained on — that number, not the in-sample one, is what to
+trust. Expect roughly 55–58% live. Trade a demo account until your own WIN/LOSS
+count says otherwise.
 
 ## How the Quotex connection works
 
@@ -180,8 +187,10 @@ Caveats, all verified the hard way:
 ## Bigger model (needs a PC or a Termux build toolchain)
 
 The `predictor/` package holds the full research pipeline: 35 causal features,
-pooled multi-pair training, isotonic calibration and walk-forward backtesting.
-It needs pandas/scikit-learn, so it is meant for a PC.
+regularised logistic regression, walk-forward backtesting and confidence sweeps.
+It needs pandas/scikit-learn, so it is meant for a PC. The live web app uses the
+same engine, so it automatically picks up this stronger model when sklearn is
+installed.
 
 ```bash
 pip install -r requirements.txt
@@ -196,7 +205,7 @@ Reports land in `reports/`, models in `models/`.
 
 - `quotex_candles.py` — print live broker candles
 - `quotex_signals.py` — live UP/DOWN signals (numpy only)
-- `predictor/engine.py` — numpy-only features/training/walk-forward, shared by the CLI and web app
+- `predictor/engine.py` — next-candle features/training/walk-forward (linear + numpy backends), shared by the CLI and web app
 - `predictor/feed.py` — `BaseFeed`: shared background poller/trainer/retrainer
 - `predictor/tradingview_live.py` — background TradingView feed (default)
 - `predictor/quotex_live.py` — background Quotex feed

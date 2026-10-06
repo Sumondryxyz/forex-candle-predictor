@@ -29,7 +29,8 @@ def test_features_are_causal_and_finite():
     rows = _candles(400)
     o, h, low, c, t = engine.arrays(rows)
     X = engine.features(o, h, low, c, t)
-    assert X.shape == (400, 22)
+    assert X.shape[0] == 400
+    assert X.shape[1] >= 22
     assert np.isfinite(X).all()
     # Truncating the series must not change an already-closed candle's row.
     truncated = engine.features(o[:300], h[:300], low[:300], c[:300], t[:300])[-1]
@@ -62,3 +63,14 @@ def test_walk_forward_reports_honest_metrics():
     assert report is not None
     assert report["signals"] >= 0
     assert 0 <= report["coverage"] <= 100
+
+
+def test_numpy_fallback_backend_still_works(monkeypatch):
+    # Termux has no scikit-learn; the numpy ensemble must remain a working path.
+    monkeypatch.setattr(engine, "_LINEAR", False)
+    rows = _candles(1500, seed=5)
+    o, h, low, c, t = engine.arrays(rows)
+    X = engine._features_numpy(o, h, low, c, t)
+    model = engine.train(X, c)
+    assert isinstance(model, engine.Ensemble)
+    assert 0.0 <= float(model.prob(X[-1:])[0]) <= 1.0

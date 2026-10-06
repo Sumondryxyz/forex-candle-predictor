@@ -25,6 +25,7 @@ import threading
 
 from flask import Flask, jsonify, render_template, request
 
+from . import engine
 from .quotex_live import QuotexFeed
 from .tradingview_live import TradingViewFeed
 
@@ -116,7 +117,7 @@ def create_app() -> Flask:
 
     @app.get("/api/health")
     def health():
-        return jsonify({"status": "ok", "source": DEFAULT_SOURCE})
+        return jsonify({"status": "ok", "source": DEFAULT_SOURCE, "model": engine.backend_name()})
 
     @app.get("/api/config")
     def config():
