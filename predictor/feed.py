@@ -74,6 +74,9 @@ class BaseFeed:
         self._results: deque[bool] = deque(maxlen=200)
         self._since_retrain = 0
         self._walk_forward: dict | None = None
+        # Raw out-of-sample arrays, kept so set_min_conf() can re-threshold
+        # without retraining the model.
+        self._walk_forward_raw: dict | None = None
         self._status = "idle"
         self._error: str | None = None
         self._updated: float | None = None
@@ -86,6 +89,24 @@ class BaseFeed:
         return f"{type(exc).__name__}: {exc}"
 
     # -------------------------------------------------------------- state
+    def set_min_conf(self, value: float) -> float:
+        """Change the confidence floor live, without retraining.
+
+        The walk-forward raw arrays are the only thing the threshold touches, so
+        re-summarising them at the new floor is instant. The next signal is then
+        judged against the new floor.
+        """
+        value = float(value)
+        if not 0.5 <= value <= 0.95:
+            raise ValueError("min_conf must be between 0.5 and 0.95")
+        with self._lock:
+            self.min_conf = value
+            if self._walk_forward_raw is not None:
+                self._walk_forward = engine.summarise(
+                    self._walk_forward_raw, min_conf=value, payout=self.payout
+                )
+        return value
+
     def _set_status(self, status: str, error: str | None = None) -> None:
         with self._lock:
             self._status = status
@@ -268,6 +289,7 @@ class BaseFeed:
             self._candles = candles[-MAX_CANDLES:]
             self._seen = {x["time"] for x in self._candles}
             self._model = model
+            self._walk_forward_raw = engine.walk_forward_raw(X, c)
             self._walk_forward = engine.walk_forward(
                 X, c, min_conf=self.min_conf, payout=self.payout
             )

@@ -123,6 +123,17 @@
         {% for i in intervals %}<option value="{{ i }}"{% if i == '5m' %} selected{% endif %}>{{ i }}</option>{% endfor %}
       </select>
     </div>
+    <div>
+      <label for="floor">Min confidence</label>
+      <select id="floor" title="Higher = fewer, more accurate signals">
+        <option value="0.65">0.65</option>
+        <option value="0.70" selected>0.70</option>
+        <option value="0.75">0.75</option>
+        <option value="0.80">0.80</option>
+        <option value="0.85">0.85</option>
+        <option value="0.90">0.90</option>
+      </select>
+    </div>
     <button id="go">Connect live</button>
     <button id="bt" class="ghost">Run backtest</button>
     <button id="lg" class="ghost">Refresh ledger</button>
@@ -332,15 +343,39 @@ async function pollLive() {
   }
 }
 
+async function applyFloor() {
+  const pair = $('pair').value, interval = $('interval').value, source = $('source').value;
+  const min_conf = parseFloat($('floor').value);
+  $('signal-err').textContent = '';
+  setStatus('updating confidence floor...');
+  try {
+    const res = await fetch('/api/min-conf', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ pair, interval, source, min_conf }),
+    });
+    const d = await res.json();
+    if (!res.ok) throw new Error(d.error || ('HTTP ' + res.status));
+    renderLive(d);
+    setStatus('live');
+  } catch (e) {
+    $('signal-err').textContent = e.message;
+    setStatus('error');
+  }
+}
+
 async function loadSignal() {
   stopLive();
   const source = $('source').value;
   $('signal-err').textContent = '';
   $('go').disabled = true; setStatus('starting live feed...');
   await pollLive();
+  await applyFloor();  // honour the chosen confidence floor
   $('go').disabled = false;
   liveTimer = setInterval(pollLive, 10000);
 }
+
+$('floor').addEventListener('change', () => { if (liveTimer) applyFloor(); });
 
 async function loadBacktest() {
   const pair = $('pair').value, interval = $('interval').value, source = $('source').value;

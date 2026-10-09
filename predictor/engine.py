@@ -322,18 +322,15 @@ def walk_forward_raw(X, c, train_size=None):
     }
 
 
-def walk_forward(X, c, min_conf=0.60, payout=0.80, train_size=None):
-    """Honest out-of-sample check: train on a rolling past window, score the next.
+SWEEP_THRESHOLDS = (0.50, 0.55, 0.60, 0.65, 0.70, 0.75, 0.80, 0.85, 0.90)
 
-    A fixed rolling window (rather than an expanding one) is both more honest
-    about how the live feed retrains and measurably stronger on FX, where very
-    old candles stop being representative. Returns the headline rate at
-    ``min_conf`` plus a ``sweep`` table showing the hit rate at several
-    confidence floors, so a caller can see where the edge actually lives.
+
+def summarise(raw, min_conf=0.60, payout=0.80, thresholds=SWEEP_THRESHOLDS):
+    """Headline stats at ``min_conf`` plus the sweep, from raw walk-forward arrays.
+
+    Kept separate from :func:`walk_forward` so a caller can hold onto the raw
+    ``conf``/``correct`` arrays and re-threshold later without retraining.
     """
-    raw = walk_forward_raw(X, c, train_size=train_size)
-    if raw is None:
-        return None
     conf = raw["conf"]
     correct = raw["correct"]
 
@@ -357,8 +354,23 @@ def walk_forward(X, c, min_conf=0.60, payout=0.80, train_size=None):
         "rate": (headline["rate"] or 0.0),
         "coverage": headline["coverage"],
         "roi": (headline["roi"] or 0.0),
-        "sweep": [stats(t) for t in (0.50, 0.55, 0.60, 0.65, 0.70)],
+        "sweep": [stats(t) for t in thresholds],
     }
+
+
+def walk_forward(X, c, min_conf=0.60, payout=0.80, train_size=None):
+    """Honest out-of-sample check: train on a rolling past window, score the next.
+
+    A fixed rolling window (rather than an expanding one) is both more honest
+    about how the live feed retrains and measurably stronger on FX, where very
+    old candles stop being representative. Returns the headline rate at
+    ``min_conf`` plus a ``sweep`` table showing the hit rate at several
+    confidence floors, so a caller can see where the edge actually lives.
+    """
+    raw = walk_forward_raw(X, c, train_size=train_size)
+    if raw is None:
+        return None
+    return summarise(raw, min_conf=min_conf, payout=payout)
 
 
 def arrays(candles):

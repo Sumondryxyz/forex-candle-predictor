@@ -111,3 +111,31 @@ Lesson: FX next-candle edge is tiny. Guard every change by selecting on one time
 slice and measuring on a LATER, untouched slice; small signal counts lie.
 `engine.walk_forward_raw()` exists exactly for that split-and-measure workflow.
 
+### "Human-like" analysis — measured, rejected as a model change
+Prompted by a request to teach the model to read charts like a human. Measured
+pooled over all out-of-sample folds, 90 days, 6 pairs, 5m+15m (honest):
+
+- **Human feature block** (pin bar, engulfing, liquidity sweep, inside/outside
+  bar, slope, position-in-range, round-number distance): at floor 0.70 it scored
+  56.4% vs 57.1% base, and at 0.75 58.2% vs 58.6%. A first-half/second-half
+  split made it look like +2-3 points, but the pooled all-fold number is flat to
+  negative -> in-sample fluke. NOT shipped as features.
+- **Human filters on the base model** (trend agreement, HTF agreement, active
+  session, RSI not extended): none beat plain `all`. `trend_agree` HURT at 0.70
+  (56.9% vs 57.1%); the others were within noise. "Trade with the trend" is not
+  an edge on 1m/5m FX next-candle.
+- **Cross-asset training** (one global model on all pairs + pair one-hot vs a
+  per-pair model, 80/20 time split): contradictory — 5m favoured per-pair, 15m
+  favoured global. Not a stable, shippable gain.
+
+The high thresholds were the real lever: base35 pooled hit rises 57.1% (0.70)
+-> 58.6% (0.75) -> 59-60% (~0.85), so this became a live user control instead.
+
+## Live confidence floor (`POST /api/min-conf`)
+- `engine.summarise(raw, min_conf, payout)` re-thresholds cached raw walk-forward
+  arrays; `BaseFeed.set_min_conf()` calls it and stores the new floor. No
+  retrain, no redeploy — instant.
+- Dashboard has a "Min confidence" selector (0.65-0.90); changing it re-renders
+  the signal at the new floor. The 0.85+ range is where the honest hit rate is
+  ~59-60%, at the cost of fewer signals.
+

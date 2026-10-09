@@ -181,6 +181,24 @@ def create_app() -> Flask:
         except InputError as exc:
             return jsonify({"error": str(exc)}), 400
 
+    @app.post("/api/min-conf")
+    def set_min_conf_view():
+        """Raise or lower the confidence floor live, no retrain, no redeploy."""
+        payload = request.get_json(silent=True) or {}
+        pair = payload.get("pair") or request.args.get("pair", "EURUSD")
+        interval = payload.get("interval") or request.args.get("interval", "5m")
+        source = payload.get("source") or request.args.get("source")
+        try:
+            value = float(payload.get("min_conf", request.args.get("min_conf")))
+        except (TypeError, ValueError):
+            return jsonify({"error": "min_conf must be a number"}), 400
+        try:
+            feed = get_feed(pair, interval, source)
+            feed.set_min_conf(value)
+            return jsonify(feed.snapshot())
+        except (InputError, ValueError) as exc:
+            return jsonify({"error": str(exc)}), 400
+
     @app.get("/api/ledger")
     def ledger_view():
         """Honest forward record: every resolved paper signal and its WIN/LOSS."""

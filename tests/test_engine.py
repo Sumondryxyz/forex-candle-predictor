@@ -65,6 +65,18 @@ def test_walk_forward_reports_honest_metrics():
     assert 0 <= report["coverage"] <= 100
 
 
+def test_summarise_lets_you_re_threshold_without_retraining():
+    rows = _candles(1500, seed=3)
+    o, h, low, c, t = engine.arrays(rows)
+    X = engine.features(o, h, low, c, t)
+    raw = engine.walk_forward_raw(X, c)
+    low = engine.summarise(raw, min_conf=0.55)
+    high = engine.summarise(raw, min_conf=0.85)
+    # A higher floor can only keep fewer signals, and the sweep reaches 0.90.
+    assert high["signals"] <= low["signals"]
+    assert [s["min_conf"] for s in high["sweep"]][-1] == 0.90
+
+
 def test_numpy_fallback_backend_still_works(monkeypatch):
     # Termux has no scikit-learn; the numpy ensemble must remain a working path.
     monkeypatch.setattr(engine, "_LINEAR", False)

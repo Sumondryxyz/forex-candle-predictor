@@ -35,12 +35,20 @@ class FakeFeed:
 
     def __init__(self, pair, interval):
         self.pair, self.interval = pair, interval
+        self.min_conf = SNAPSHOT["min_conf"]
 
     def start(self):
         pass
 
     def snapshot(self):
-        return dict(SNAPSHOT, pair=self.pair, interval=self.interval, source=self.source)
+        return dict(
+            SNAPSHOT, pair=self.pair, interval=self.interval,
+            source=self.source, min_conf=self.min_conf,
+        )
+
+    def set_min_conf(self, value):
+        self.min_conf = value
+        return value
 
     def candles(self, limit=500):
         row = {"time": 1, "open": 1.0, "high": 1.1, "low": 0.9, "close": 1.05, "volume": 1.0}
@@ -130,6 +138,24 @@ def test_unsupported_interval_is_rejected(client):
     res = client.get("/api/live?pair=EURUSD&interval=3m")
     assert res.status_code == 400
     assert "unsupported interval" in res.get_json()["error"]
+
+
+def test_min_conf_endpoint_updates_the_feed(client):
+    res = client.post(
+        "/api/min-conf",
+        json={"pair": "EURUSD", "interval": "5m", "source": "tradingview", "min_conf": 0.85},
+    )
+    assert res.status_code == 200
+    body = res.get_json()
+    assert body["min_conf"] == 0.85
+    feed = webapp._feeds[("tradingview", "EURUSD", "5m")]
+    assert feed.min_conf == 0.85
+
+
+def test_min_conf_endpoint_rejects_a_non_number(client):
+    res = client.post("/api/min-conf", json={"min_conf": "high"})
+    assert res.status_code == 400
+    assert "must be a number" in res.get_json()["error"]
 
 
 def test_ledger_endpoint_returns_the_forward_record(client, monkeypatch, tmp_path):
