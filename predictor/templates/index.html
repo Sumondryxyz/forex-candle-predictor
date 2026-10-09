@@ -170,7 +170,11 @@ function renderLive(d) {
   }
   if (!d.direction) {
     $('signal-body').innerHTML = `<div class="signal">${pill}</div>
-      <p class="note">Loading ${d.source} history and training the model...</p>`;
+      <p class="note">Downloading ${d.source} history and training the model for
+      ${d.pair} ${d.interval}...</p>
+      <p class="note">First time you pick a pair/interval this takes about
+      <b>30-60s</b> (roughly 5100 candles + a walk-forward check). The page
+      retries every 10s, so just wait a moment — no need to reload.</p>`;
     return;
   }
 
