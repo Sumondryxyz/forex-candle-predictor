@@ -15,10 +15,11 @@ services:
         value: 0.0.0.0
       - key: DATA_SOURCE
         value: tradingview
-      # 0.65: measured net-positive ROI on 5 of 6 pair/interval combos vs 3 of 6
-      # at 0.60. Fewer signals, but the ones printed are more often right.
+      # 0.70: measured on 30/45/90-day windows, the average hit rate at 0.70 beat
+      # 0.65 in every window (58.1% vs 52.9% on 30 days) with net-positive ROI.
+      # Fewer signals, but the ones printed are more often right.
       - key: MIN_CONF
-        value: "0.65"
+        value: "0.70"
       - key: HISTORY_HOURS
         value: "72"
       - key: RETRAIN_EVERY

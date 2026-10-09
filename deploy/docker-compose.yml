@@ -9,7 +9,7 @@ services:
     environment:
       PORT: "12000"
       HOST: "0.0.0.0"
-      MIN_CONF: "0.60"
+      MIN_CONF: "0.70"
       HISTORY_HOURS: "72"
     restart: unless-stopped
     healthcheck:

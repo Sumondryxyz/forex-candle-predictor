@@ -65,8 +65,10 @@ places trades. Live data comes from an unofficial TradingView chart websocket
   candidate change on the SAME data before shipping.
 - Heterogeneous edge is the norm: EURUSD/GBPUSD 5m-15m carry a small edge,
   USDJPY 15m was a coin-flip. Never trust one pair/interval.
-- Default `MIN_CONF` is 0.65, not 0.60: 5 of 6 combos are net-positive at 0.65
-  vs 3 of 6 at 0.60. Fewer signals, better ROI.
+- Default `MIN_CONF` is **0.70** (raised from 0.65 in 2026-10): on 30/45/90-day
+  windows the average hit rate at 0.70 beat 0.65 in *every* window (58.1% vs
+  52.9% on 30 days; 59.3% vs 57.0% on 90 days) with net-positive ROI throughout.
+  Fewer signals, better accuracy. Re-measure with `research_sweep.py --min-conf`.
 - `engine._train_linear` isotonic-calibrates on a held-out tail (80/20) when
   history >= `MODEL_CALIB_MIN` (1500). Set `MODEL_CALIBRATE=0` to disable.
   Calibration helps overall but hurt GBPUSD 15m - expected, not a bug.
@@ -99,6 +101,11 @@ below looked promising in-sample and then failed the honest test:
   negative on the evaluation tail. The full 35-feature set is fine.
 - **Time-bagging** (average probs over several rolling windows): the apparent
   gain came from 8-12 USDJPY signals; EURUSD 5m got worse. Noise.
+- **Longer prediction horizon** (target `close[t+3]` instead of `close[t+1]`):
+  trained AND scored on the same k it averaged 57.0% vs 57.9% for k=1, with
+  USDJPY 5m collapsing to 47.5%. An ad-hoc harness showed a fake gain because it
+  trained via `engine.labels()` (1-step) but scored with a hand-written 3-step
+  label — trainer and evaluator MUST share the label definition. Rejected.
 
 Lesson: FX next-candle edge is tiny. Guard every change by selecting on one time
 slice and measuring on a LATER, untouched slice; small signal counts lie.

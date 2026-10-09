@@ -92,7 +92,7 @@ Useful environment variables:
 | `DATA_SOURCE` | tradingview | default source (`tradingview` or `quotex`) |
 | `WEB_PAIRS` | EURUSD,GBPUSD,USDJPY,AUDUSD,USDCHF,USDCAD | pairs offered in the dropdown |
 | `WEB_INTERVALS` | 1m,5m,15m | intervals offered |
-| `MIN_CONF` | 0.65 | skip signals below this confidence |
+| `MIN_CONF` | 0.70 | skip signals below this confidence |
 | `PAYOUT` | 0.80 | payout used for the walk-forward ROI |
 | `HISTORY_HOURS` | 72 | history to train on |
 | `RETRAIN_EVERY` | 60 | retrain after this many new candles |
@@ -224,12 +224,18 @@ trade at an 80% payout (break-even is 55.6%):
 
 Read this honestly, not as a promise:
 
-- The edge lives in **selectivity**. At the default floor of **0.65** the ROI is
-  net-positive on 5 of 6 combos; at 0.60 only 3 of 6. So the app now defaults to
-  0.65 (fewer signals, but the ones it prints are more likely right).
-- It is **not uniformly good**. USDJPY 15m has no edge here (−7.7% at 0.65), and
-  GBPUSD 15m is the one combo that got *worse* under calibration (4.2 → 1.0 at
-  0.60). A single pair can be a coin-flip; never act on one combo.
+- The edge lives in **selectivity**. Raising the floor from 0.65 to **0.70** lifts
+  the average hit rate on every window measured (30/45/90 days): e.g. 58.1% vs
+  52.9% on 30 days, 59.3% vs 57.0% on 90 days, with net-positive ROI throughout.
+  Fewer signals, but the ones it prints are more often right — which is what you
+  want if the goal is accuracy. Default is now 0.70.
+- A one-candle **horizon** (predict `close[t+3]` vs `close[t]` instead of
+  `close[t+1]`) does *not* help: on the real training path the 3-candle target
+  averaged 57.0% vs 57.9% for the next candle, and USDJPY 5m collapsed to 47.5%.
+  An early harness suggested a gain, but it trained on 1-step labels and scored
+  on 3-step ones — a bug, not an edge. Rejected.
+- It is **not uniformly good**. USDJPY 15m has no edge here, and a single pair
+  can be a coin-flip; never act on one combo. Judge the aggregate.
 - The linear engine and a calibrated LightGBM (`train_backtest.py`) are close and
   trade places per combo (e.g. EURUSD 5m favours the GBM at ≥0.75). Neither is
   clearly better, so the lightweight linear model stays the default.

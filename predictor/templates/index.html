@@ -275,7 +275,7 @@ function renderBacktest(d) {
       <thead><tr><th>min conf</th><th>signals</th><th>coverage</th><th>hit rate</th><th>ROI / trade</th></tr></thead>
       <tbody>${rows}</tbody></table>` : ''}
     <p class="note ${beats ? '' : 'warn'}">Out-of-sample check on the candles the feed
-    trained on, at the ${((d.min_conf || 0.65) * 100).toFixed(0)}% confidence filter.
+    trained on, at the ${((d.min_conf || 0.70) * 100).toFixed(0)}% confidence filter.
     ${beats ? 'Beats break-even on this sample.' : 'Below break-even here — paper trade first.'}
     Small signal counts are noisy.</p>`;
 }
@@ -356,9 +356,9 @@ function renderLedger(d) {
       <div><div class="k">win rate</div><span class="${d.win_rate >= 55.6 ? 'up' : 'down'}">${d.win_rate}%</span></div>
       <div><div class="k">ROI / trade</div><span class="${overallClass}">${d.roi >= 0 ? '+' : ''}${d.roi}%</span></div>
     </div>
-    <p class="note">Forward record across ${d.by_combo.length} connected combo(s). Break-even at an
-    80% payout is 55.6%; below that a bet loses money over time. This only proves an edge after many
-    trades — treat small counts as noise.</p>
+    <p class="note">Forward record across ${d.by_combo.length} connected combo(s). At an 80% payout the
+    break-even win rate is 55.6%; below that a bet loses money over time. This only proves an edge
+    after many trades — treat small counts as noise.</p>
     <table><thead><tr><th>combo</th><th>trades</th><th>W-L</th><th>win rate</th><th>ROI</th></tr></thead>
     <tbody>${comboRows}</tbody></table>
     <h3 class="sub-h">Latest resolved signals</h3>
