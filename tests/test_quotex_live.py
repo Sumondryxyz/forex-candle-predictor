@@ -71,6 +71,22 @@ def test_bootstrap_trains_and_reports_a_signal():
     assert len(snap["recent"]) == 60
 
 
+def test_signal_candle_is_the_next_candle_after_the_last_closed_one():
+    # The call is for the next candle: it opens exactly one interval after the
+    # last closed candle and closes one interval later. This is what removes the
+    # "running or next candle?" ambiguity in the UI.
+    from datetime import datetime
+
+    feed = QuotexFeed("EURUSD", "1m")
+    _bootstrap(feed, _candles(1200, start=1_700_000_000))
+    snap = feed.snapshot()
+    last = datetime.fromisoformat(snap["last_candle_time"]).timestamp()
+    open_t = datetime.fromisoformat(snap["signal_candle_open"]).timestamp()
+    close_t = datetime.fromisoformat(snap["signal_candle_close"]).timestamp()
+    assert open_t == last + 60  # 1m interval
+    assert close_t == open_t + 60
+
+
 def test_ingest_resolves_pending_signal():
     feed = QuotexFeed("EURUSD", "1m")
     feed.min_conf = 0.0  # force every candle to become a pending signal

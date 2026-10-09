@@ -142,6 +142,15 @@ class BaseFeed:
                 "last_candle_time": datetime.fromtimestamp(
                     last["time"], tz=timezone.utc
                 ).isoformat(),
+                # The signal is for the very next candle: it opens when the last
+                # closed candle ended and resolves when it closes. Both instants
+                # are reported so the UI can say exactly which candle is called.
+                "signal_candle_open": datetime.fromtimestamp(
+                    last["time"] + self.period, tz=timezone.utc
+                ).isoformat(),
+                "signal_candle_close": datetime.fromtimestamp(
+                    last["time"] + 2 * self.period, tz=timezone.utc
+                ).isoformat(),
                 "recent": [
                     {
                         "time": datetime.fromtimestamp(x["time"], tz=timezone.utc).isoformat(),

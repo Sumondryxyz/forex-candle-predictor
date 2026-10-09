@@ -66,6 +66,13 @@
   .conf-bar { height: 8px; border-radius: 6px; background: var(--panel-2); overflow: hidden; margin-top: 8px; }
   .conf-bar > span { display: block; height: 100%; background: linear-gradient(90deg, var(--accent), var(--up)); }
   .note { color: var(--muted); font-size: 12px; line-height: 1.6; margin-top: 14px; }
+  .candle-call { margin-top: 16px; padding: 12px 14px; border: 1px solid var(--line);
+    border-radius: 10px; background: rgba(255,255,255,.02); }
+  .candle-call .cc-head { font-size: 14px; font-weight: 600; margin-bottom: 10px; }
+  .candle-call .cc-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px 18px; }
+  .candle-call .cc-grid div { font-size: 13px; }
+  .candle-call .k { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .05em; }
+  .candle-call .note { margin-top: 10px; }
   .warn { color: var(--warn); }
   .sweep { width: 100%; border-collapse: collapse; margin-top: 16px; font-size: 13px; }
   .sweep th, .sweep td { padding: 6px 10px; text-align: right; border-bottom: 1px solid var(--border); }
@@ -160,6 +167,12 @@ async function getJSON(url) {
   return data;
 }
 
+// HH:MM:SS in local time, from an ISO instant.
+const clock = (iso) => iso ? new Date(iso).toLocaleTimeString([], { hour12: false }) : '-';
+// Whole seconds until an instant (never negative).
+const until = (iso) => Math.max(0, Math.round((new Date(iso).getTime() - Date.now()) / 1000));
+const mmss = (s) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+
 const statusPill = (s) => ({
   live: '<span class="pill open">live</span>',
   loading: '<span class="pill">loading history...</span>',
@@ -170,6 +183,7 @@ const statusPill = (s) => ({
 
 function renderLive(d) {
   const pill = statusPill(d.status);
+  ccTarget = d.signal_candle_close || null;
 
   if (d.error) {
     $('signal-body').innerHTML = `
@@ -228,7 +242,19 @@ function renderLive(d) {
       <div><div class="k">account</div>${d.account}</div>
       <div><div class="k">walk-forward</div>${wf}</div>
       <div><div class="k">session W/L</div>${sess}</div>
-      <div><div class="k">next candle opens</div>${new Date(d.next_candle_open).toISOString().slice(11,19)}Z</div>
+    </div>
+    <div class="candle-call">
+      <div class="cc-head">${d.side} for the <b>next ${d.interval} candle</b></div>
+      <div class="cc-grid">
+        <div><div class="k">last closed candle</div>${clock(d.last_candle_time)}</div>
+        <div><div class="k">predicted candle opens</div><b>${clock(d.signal_candle_open)}</b></div>
+        <div><div class="k">predicted candle closes</div><b>${clock(d.signal_candle_close)}</b></div>
+        <div><div class="k">result ready in</div><b id="cc-countdown">${mmss(until(d.signal_candle_close))}</b></div>
+      </div>
+      <p class="note">The model reads candles closed up to ${clock(d.last_candle_time)} and calls the
+      candle from ${clock(d.signal_candle_open)} to ${clock(d.signal_candle_close)}. The running
+      candle between those two times is still forming; it is <b>not</b> traded. One call = one
+      candle: the next signal after this one is for the candle that follows it.</p>
     </div>
     <p class="note">Live ${d.source} feed, auto-refreshing. Probability of an up-close:
     ${(d.probability*100).toFixed(1)}%. Signals are only printed once confidence clears
@@ -281,6 +307,13 @@ function renderBacktest(d) {
 }
 
 let liveTimer = null;
+let ccTarget = null;  // ISO instant the current signal resolves; drives the 1s countdown
+
+// Tick the "result ready in" clock every second, independent of the 10s poll.
+setInterval(() => {
+  const el = $('cc-countdown');
+  if (el && ccTarget) el.textContent = mmss(until(ccTarget));
+}, 1000);
 
 function stopLive() {
   if (liveTimer) { clearInterval(liveTimer); liveTimer = null; }
