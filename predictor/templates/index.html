@@ -260,7 +260,7 @@ function renderBacktest(d) {
       <thead><tr><th>min conf</th><th>signals</th><th>coverage</th><th>hit rate</th><th>ROI / trade</th></tr></thead>
       <tbody>${rows}</tbody></table>` : ''}
     <p class="note ${beats ? '' : 'warn'}">Out-of-sample check on the candles the feed
-    trained on, at the ${((d.min_conf || 0.6) * 100).toFixed(0)}% confidence filter.
+    trained on, at the ${((d.min_conf || 0.65) * 100).toFixed(0)}% confidence filter.
     ${beats ? 'Beats break-even on this sample.' : 'Below break-even here — paper trade first.'}
     Small signal counts are noisy.</p>`;
 }
