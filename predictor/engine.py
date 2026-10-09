@@ -288,14 +288,12 @@ def train(X, c, seeds=5):
     return _train_numpy(X, c, seeds=seeds)
 
 
-def walk_forward(X, c, min_conf=0.60, payout=0.80, train_size=None):
-    """Honest out-of-sample check: train on a rolling past window, score the next.
+def walk_forward_raw(X, c, train_size=None):
+    """Per-observation out-of-sample confidences and correctness, in time order.
 
-    A fixed rolling window (rather than an expanding one) is both more honest
-    about how the live feed retrains and measurably stronger on FX, where very
-    old candles stop being representative. Returns the headline rate at
-    ``min_conf`` plus a ``sweep`` table showing the hit rate at several
-    confidence floors, so a caller can see where the edge actually lives.
+    Same fixed rolling-window scheme as :func:`walk_forward`, but returns the raw
+    arrays so a caller can split them by time (e.g. choose a threshold on an
+    early slice and measure it on a later one). Returns ``None`` if too short.
     """
     y, usable = labels(c)
     idx = np.flatnonzero(usable)
@@ -318,8 +316,26 @@ def walk_forward(X, c, min_conf=0.60, payout=0.80, train_size=None):
 
     if not confs:
         return None
-    conf = np.concatenate(confs)
-    correct = np.concatenate(corrects)
+    return {
+        "conf": np.concatenate(confs),
+        "correct": np.concatenate(corrects).astype(float),
+    }
+
+
+def walk_forward(X, c, min_conf=0.60, payout=0.80, train_size=None):
+    """Honest out-of-sample check: train on a rolling past window, score the next.
+
+    A fixed rolling window (rather than an expanding one) is both more honest
+    about how the live feed retrains and measurably stronger on FX, where very
+    old candles stop being representative. Returns the headline rate at
+    ``min_conf`` plus a ``sweep`` table showing the hit rate at several
+    confidence floors, so a caller can see where the edge actually lives.
+    """
+    raw = walk_forward_raw(X, c, train_size=train_size)
+    if raw is None:
+        return None
+    conf = raw["conf"]
+    correct = raw["correct"]
 
     def stats(threshold):
         picked = conf >= threshold

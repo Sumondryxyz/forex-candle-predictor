@@ -75,3 +75,23 @@ places trades. Live data comes from an unofficial TradingView chart websocket
 - LightGBM (`train_backtest.py`) and the linear engine are close; the live app
   keeps linear because it is lighter and has no compile step.
 
+## Upgrade attempts that did NOT hold up (do not repeat blindly)
+Measured out-of-sample on 60 days of EURUSD/GBPUSD/USDJPY 5m+15m. Every idea
+below looked promising in-sample and then failed the honest test:
+
+- **Ensemble (linear + calibrated GBM, `predictor/advanced.py`)**: total ROI at
+  0.65 was ~0 vs ~+21% for plain linear. Keep the module for experiments
+  (`research_sweep.py --backend ensemble`) but do NOT make it the live default.
+- **Per-pair auto-threshold**: choosing a threshold on the first 60% of signals
+  and testing on the last 40% gave +49% vs +63% for a fixed 0.65. It overfits.
+- **Train-window size**: 1200/2550/4000 candles; the huge value at 4000 came from
+  1-4 signals on one combo. Noise, not edge.
+- **Feature pruning by |correlation|**: all-features and every top-k subset were
+  negative on the evaluation tail. The full 35-feature set is fine.
+- **Time-bagging** (average probs over several rolling windows): the apparent
+  gain came from 8-12 USDJPY signals; EURUSD 5m got worse. Noise.
+
+Lesson: FX next-candle edge is tiny. Guard every change by selecting on one time
+slice and measuring on a LATER, untouched slice; small signal counts lie.
+`engine.walk_forward_raw()` exists exactly for that split-and-measure workflow.
+

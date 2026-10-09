@@ -22,6 +22,20 @@ from predictor import engine
 from predictor.sources import get_fetcher
 
 
+def _use_backend(name: str) -> None:
+    """Optionally swap the model behind ``engine.train`` for the experiment."""
+    if name == "default":
+        return
+    if name == "ensemble":
+        from predictor import advanced
+
+        if not advanced.available():
+            raise SystemExit("ensemble backend unavailable in this environment")
+        engine.train = advanced.train  # the harness only, never the live app
+        return
+    raise SystemExit(f"unknown backend {name!r} (use default or ensemble)")
+
+
 def measure(df, min_conf: float, payout: float):
     o = df["open"].to_numpy(float)
     h = df["high"].to_numpy(float)
@@ -40,15 +54,18 @@ def main() -> None:
     ap.add_argument("--min-conf", type=float, default=0.60)
     ap.add_argument("--payout", type=float, default=0.80)
     ap.add_argument("--source", default=None)
+    ap.add_argument("--backend", default="default", help="default (linear) or ensemble")
     ap.add_argument("--json", default=None)
     ap.add_argument("--tag", default="current")
     args = ap.parse_args()
 
+    _use_backend(args.backend)
     fetch = get_fetcher(args.source)
     pairs = [p.strip().upper() for p in args.pairs.split(",") if p.strip()]
     intervals = [i.strip() for i in args.intervals.split(",") if i.strip()]
 
-    print(f"backend={engine.backend_name()}  tag={args.tag}  days={args.days}")
+    shown = engine.backend_name() if args.backend == "default" else args.backend
+    print(f"backend={shown}  tag={args.tag}  days={args.days}")
     header = f"{'pair':>7} {'int':>4} {'n':>6} {'signals':>8} {'cov%':>6} {'hit%':>6} {'ROI%':>7}"
     print(header)
     print("-" * len(header))
