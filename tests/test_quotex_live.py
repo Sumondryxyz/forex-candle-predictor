@@ -1,11 +1,16 @@
 import asyncio
+import time
 
 import numpy as np
 
 from predictor.quotex_live import QuotexFeed
 
 
-def _candles(n: int, start: int = 1_700_000_000, seed: int = 0):
+def _candles(n: int, start: int | None = None, seed: int = 0):
+    # Anchor history to wall-clock now so the live-freshness guard treats the
+    # final candles as current (see BaseFeed._ingest).
+    if start is None:
+        start = int(time.time()) - n * 60
     rng = np.random.default_rng(seed)
     close = 1.1 + np.cumsum(rng.normal(0, 1e-4, n))
     high = close + rng.uniform(0, 2e-4, n)
@@ -92,18 +97,55 @@ def test_ingest_resolves_pending_signal():
     feed.min_conf = 0.0  # force every candle to become a pending signal
     history = _candles(1200)
     _bootstrap(feed, history)
+    t0 = history[-1]["time"]
 
-    first = _candles(1, start=1_700_000_000 + 1200 * 60, seed=1)[0]
+    first = _candles(1, start=t0 + 60, seed=1)[0]
     feed._ingest([first])
     assert feed.snapshot()["pending"]["ref_close"] == first["close"]
 
-    second = _candles(1, start=1_700_000_000 + 1201 * 60, seed=2)[0]
+    second = _candles(1, start=t0 + 120, seed=2)[0]
     feed._ingest([second])
     session = feed.snapshot()["session"]
     assert session["signals"] == 1
     assert session["wins"] in {0, 1}
     # The just-closed candle immediately opens a new pending signal.
     assert feed.snapshot()["pending"]["ref_close"] == second["close"]
+
+def test_gapped_candle_does_not_resolve_the_signal(tmp_path, monkeypatch):
+    # Regression: a candle that is NOT the immediate next bar (e.g. a Quotex
+    # history-backfill artifact from another era) used to be recorded as a
+    # resolved signal, inflating the ledger to a fake ~97% win rate.
+    from predictor import feed as feed_mod
+
+    led = feed_mod.Ledger(path=str(tmp_path / "l.jsonl"))
+    monkeypatch.setattr(feed_mod, "LEDGER", led)
+    f = feed_mod.BaseFeed("EURUSD", "1m")
+    f.min_conf = 0.0
+    _bootstrap(f, _candles(1200))
+    last = f._candles[-1]["time"]
+
+    # A candle from an entirely different era: 1m period expected, gap is huge.
+    stale = _candles(1, start=1_600_000_000, seed=3)[0]
+    f._ingest([stale])
+    assert led.rows() == []
+
+
+def test_stale_contiguous_series_does_not_resolve(tmp_path, monkeypatch):
+    # The actual reported bug: Quotex bootstrapped a *contiguous* 2023 series
+    # (step == period) as "history", so the gap check passed and the replay got
+    # recorded as resolved signals -> fake ~97% win rate. Freshness must reject
+    # a series from the past even when candles are perfectly spaced.
+    from predictor import feed as feed_mod
+
+    led = feed_mod.Ledger(path=str(tmp_path / "l.jsonl"))
+    monkeypatch.setattr(feed_mod, "LEDGER", led)
+    f = feed_mod.BaseFeed("EURUSD", "1m")
+    f.min_conf = 0.0
+    old = 1_700_000_000  # ~Nov 2023
+    _bootstrap(f, _candles(1200, start=old))
+    t0 = f._candles[-1]["time"]
+    f._ingest(_candles(1, start=t0 + 60, seed=7))  # next stale candle, step == 60
+    assert led.rows() == []
 
 
 def test_snapshot_is_json_serialisable_after_resolving_signals():
@@ -117,10 +159,12 @@ def test_snapshot_is_json_serialisable_after_resolving_signals():
 
     feed = QuotexFeed("EURUSD", "1m")
     feed.min_conf = 0.0  # force every candle to become a pending signal
-    _bootstrap(feed, _candles(1200))
+    history = _candles(1200)
+    _bootstrap(feed, history)
+    t0 = history[-1]["time"]
 
     for i in range(3):
-        feed._ingest(_candles(1, start=1_700_000_000 + (1200 + i) * 60, seed=i + 1))
+        feed._ingest(_candles(1, start=t0 + (i + 1) * 60, seed=i + 1))
 
     snap = feed.snapshot()
     assert snap["session"]["signals"] == 2

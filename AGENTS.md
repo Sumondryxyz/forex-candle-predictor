@@ -139,6 +139,24 @@ The high thresholds were the real lever: base35 pooled hit rises 57.1% (0.70)
   the signal at the new floor. The 0.85+ range is where the honest hit rate is
   ~59-60%, at the cost of fewer signals.
 
+## Paper-trade ledger integrity (the fake-97% bug)
+- `BaseFeed._ingest` resolves a pending signal only when the resolving candle
+  is (a) exactly `period` after the signal candle AND (b) within
+  `10*period` of wall-clock now. Quotex once served a *contiguous* 2023 series
+  as "history"; step == 60s passed the gap check, so the whole replay got
+  recorded as resolved signals and the ledger showed a fake ~97% win rate
+  (EURUSD 1m: 32 trades, 31 wins). Historical/replayed candles must never count.
+- `Ledger` de-duplicates by `(pair, interval, candle_time)` on both write and
+  read, so a re-ingested candle cannot inflate the count. It uses an `RLock`
+  because `record()` re-enters `rows()` via `_load_keys()`.
+- A clean forward ledger (only genuinely live candles) is the ONE number that
+  proves or disproves the edge. Expect it to sit near the honest ~55-60%
+  walk-forward, not 97%.
+- Regression tests: `tests/test_quotex_live.py::test_stale_contiguous_series_does_not_resolve`,
+  `::test_gapped_candle_does_not_resolve_the_signal`,
+  `tests/test_ledger.py::test_same_candle_is_recorded_only_once`
+  `::test_duplicate_rows_already_in_the_file_are_collapsed`.
+
 ## TradingView volume — wired but off by default (`USE_VOLUME`)
 - TradingView DOES report per-bar volume (nonzero "tick volume", ~600-1600 on
   EURUSD 5m). `predictor/sources/tradingview.py` already parsed it.

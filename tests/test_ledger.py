@@ -69,3 +69,27 @@ def test_partial_trailing_line_is_tolerated(tmp_path):
     rows = led.rows()
     assert len(rows) == 1
     assert json.loads(json.dumps(rows[0]))["pair"] == "EURUSD"
+
+
+def test_same_candle_is_recorded_only_once(tmp_path):
+    path = tmp_path / "ledger.jsonl"
+    led = Ledger(path=str(path))
+    kw = dict(pair="EURUSD", interval="1m", source="tradingview", direction="UP",
+              confidence=0.9, entry_close=1.1, exit_close=1.1005, payout=0.8,
+              candle_time=1_700_000_000)
+    led.record(**kw)
+    led.record(**kw)  # re-ingested candle, same resolution
+    assert len(led.rows()) == 1
+    assert led.summary()["trades"] == 1
+
+
+def test_duplicate_rows_already_in_the_file_are_collapsed(tmp_path):
+    path = tmp_path / "ledger.jsonl"
+    led = Ledger(path=str(path))
+    row = led.record(pair="EURUSD", interval="1m", source="tradingview",
+                     direction="UP", confidence=0.9, entry_close=1.1,
+                     exit_close=1.1005, payout=0.8, candle_time=1_700_000_000)
+    with path.open("a", encoding="utf-8") as fh:
+        fh.write(json.dumps(row) + "\n")  # a legacy duplicate
+    assert len(led.rows()) == 1
+    assert led.summary()["trades"] == 1

@@ -35,7 +35,20 @@ class Ledger:
     def __init__(self, path: str | None = None, enabled: bool | None = None):
         self.path = Path(path or os.getenv("LEDGER_PATH", _DEFAULT_PATH))
         self.enabled = _env_bool("LEDGER_ENABLED", True) if enabled is None else enabled
-        self._lock = threading.Lock()
+        # RLock: record() holds the lock and calls _load_keys() -> rows(), which
+        # re-acquires it. A plain Lock deadlocks here.
+        self._lock = threading.RLock()
+        self._seen: set[tuple] | None = None
+
+    @staticmethod
+    def _key(*, pair: str, interval: str, candle_time: float | None) -> tuple:
+        return (pair, interval, candle_time)
+
+    def _load_keys(self) -> set[tuple]:
+        keys = set()
+        for row in self.rows():
+            keys.add((row.get("pair"), row.get("interval"), row.get("candle_time")))
+        return keys
 
     def record(
         self,
@@ -50,16 +63,21 @@ class Ledger:
         payout: float,
         candle_time: float | None = None,
     ) -> dict:
-        """Append one resolved signal and return the stored row."""
+        """Append one resolved signal and return the stored row.
+
+        A given (pair, interval, candle) is recorded at most once, so a signal
+        resolved twice (e.g. a re-ingested candle) cannot inflate the win rate.
+        """
         went_up = exit_close > entry_close
         win = went_up == (direction == "UP")
+        candle_iso = (
+            datetime.fromtimestamp(candle_time, tz=timezone.utc).isoformat()
+            if candle_time is not None
+            else None
+        )
         row = {
             "resolved_at": datetime.now(timezone.utc).isoformat(),
-            "candle_time": (
-                datetime.fromtimestamp(candle_time, tz=timezone.utc).isoformat()
-                if candle_time is not None
-                else None
-            ),
+            "candle_time": candle_iso,
             "pair": pair,
             "interval": interval,
             "source": source,
@@ -71,27 +89,47 @@ class Ledger:
             "win": bool(win),
             "pnl": float(payout) if win else -1.0,
         }
-        if self.enabled:
-            with self._lock:
-                self.path.parent.mkdir(parents=True, exist_ok=True)
-                with self.path.open("a", encoding="utf-8") as fh:
-                    fh.write(json.dumps(row) + "\n")
+        if not self.enabled:
+            return row
+        with self._lock:
+            if candle_iso is not None:
+                if self._seen is None:
+                    self._seen = self._load_keys()
+                key = self._key(pair=pair, interval=interval, candle_time=candle_iso)
+                if key in self._seen:
+                    return row
+                self._seen.add(key)
+            self.path.parent.mkdir(parents=True, exist_ok=True)
+            with self.path.open("a", encoding="utf-8") as fh:
+                fh.write(json.dumps(row) + "\n")
         return row
 
     def rows(self) -> list[dict]:
-        """All stored rows, oldest first. Tolerates a partial trailing line."""
+        """All stored rows, oldest first, de-duplicated by (pair, interval, candle).
+
+        Tolerates a partial trailing line. Duplicate rows can exist in files
+        written before de-duplication was added, so collapse them here too --
+        one resolved signal should count once.
+        """
         if not self.path.exists():
             return []
         out: list[dict] = []
+        seen: set[tuple] = set()
         with self._lock, self.path.open("r", encoding="utf-8") as fh:
             for line in fh:
                 line = line.strip()
                 if not line:
                     continue
                 try:
-                    out.append(json.loads(line))
+                    row = json.loads(line)
                 except json.JSONDecodeError:
                     continue
+                key = (row.get("pair"), row.get("interval"), row.get("candle_time"))
+                if key[2] is not None:
+                    if key in seen:
+                        continue
+                    seen.add(key)
+                out.append(row)
         return out
 
     def summary(self, recent: int = 50) -> dict:

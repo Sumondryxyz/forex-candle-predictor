@@ -83,6 +83,9 @@ class BaseFeed:
         self._seen: set[int] = set()
         self._model = None
         self._pending: dict | None = None
+        # Resolve paper trades only on candles near wall-clock now, so a stale
+        # history replay can't pollute the ledger (see _is_fresh).
+        self.freshness_check = True
         self._results: deque[bool] = deque(maxlen=200)
         self._since_retrain = 0
         self._walk_forward: dict | None = None
@@ -221,6 +224,18 @@ class BaseFeed:
         ]
 
     # ------------------------------------------------------------ ingest
+    def _is_fresh(self, candle_time: float) -> bool:
+        """True if ``candle_time`` is at/near wall-clock now, i.e. live.
+
+        Quotex can serve a stale historical series as "history"; candles in it
+        are perfectly spaced so a gap check cannot catch them. Only genuinely
+        current candles should open paper trades. Tests can disable this by
+        setting ``feed.freshness_check = False``.
+        """
+        if not self.freshness_check:
+            return True
+        return (time.time() - candle_time) <= 10 * self.period
+
     def _ingest(self, fresh: list[dict]) -> list[dict]:
         """Append newly closed candles; resolve the pending signal; maybe retrain."""
         added = []
@@ -235,22 +250,28 @@ class BaseFeed:
                 added.append(candle)
 
                 if self._pending:
-                    went_up = candle["close"] > self._pending["ref_close"]
-                    win = bool(went_up == (self._pending["dir"] == "UP"))
-                    # bool()/float() strip numpy scalars, which Flask's jsonify
-                    # cannot serialise (int64 -> 500 on /api/live).
-                    self._results.append(win)
-                    LEDGER.record(
-                        pair=self.pair,
-                        interval=self.interval,
-                        source=self.source,
-                        direction=self._pending["dir"],
-                        confidence=self._pending["conf"],
-                        entry_close=self._pending["ref_close"],
-                        exit_close=candle["close"],
-                        payout=self.payout,
-                        candle_time=candle["time"],
-                    )
+                    # A signal for "the next candle" resolves on the candle
+                    # exactly one period later. (Whether the *signal* is live is
+                    # checked when it is created -- see _is_fresh -- so a
+                    # historical replay never opens a pending signal at all.)
+                    step = candle["time"] - self._pending["time"]
+                    if step == self.period:
+                        went_up = candle["close"] > self._pending["ref_close"]
+                        win = bool(went_up == (self._pending["dir"] == "UP"))
+                        # bool()/float() strip numpy scalars, which Flask's
+                        # jsonify cannot serialise (int64 -> 500 on /api/live).
+                        self._results.append(win)
+                        LEDGER.record(
+                            pair=self.pair,
+                            interval=self.interval,
+                            source=self.source,
+                            direction=self._pending["dir"],
+                            confidence=self._pending["conf"],
+                            entry_close=self._pending["ref_close"],
+                            exit_close=candle["close"],
+                            payout=self.payout,
+                            candle_time=candle["time"],
+                        )
                     self._pending = None
 
             if added and self._model is not None:
@@ -268,7 +289,18 @@ class BaseFeed:
                 direction = "UP" if prob > 0.5 else "DOWN"
                 conf = max(prob, 1 - prob)
                 if conf >= self.min_conf:
-                    self._pending = {"dir": direction, "ref_close": c[-1], "conf": conf}
+                    sig_time = float(t[-1])
+                    self._pending = {
+                        "dir": direction,
+                        "ref_close": c[-1],
+                        "conf": conf,
+                        "time": sig_time,
+                    }
+                    if not self._is_fresh(sig_time):
+                        # A signal for a candle from the past (e.g. a Quotex
+                        # history replay) must never be recorded as a paper
+                        # trade: that produced a fake ~97% win rate. Drop it.
+                        self._pending = None
                 self._updated = time.time()
         return added
 
