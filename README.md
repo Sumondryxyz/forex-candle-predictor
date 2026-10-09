@@ -92,10 +92,12 @@ Useful environment variables:
 | `DATA_SOURCE` | tradingview | default source (`tradingview` or `quotex`) |
 | `WEB_PAIRS` | EURUSD,GBPUSD,USDJPY,AUDUSD,USDCHF,USDCAD | pairs offered in the dropdown |
 | `WEB_INTERVALS` | 1m,5m,15m | intervals offered |
-| `MIN_CONF` | 0.60 | skip signals below this confidence |
+| `MIN_CONF` | 0.65 | skip signals below this confidence |
 | `PAYOUT` | 0.80 | payout used for the walk-forward ROI |
 | `HISTORY_HOURS` | 72 | history to train on |
 | `RETRAIN_EVERY` | 60 | retrain after this many new candles |
+| `LEDGER_ENABLED` | 1 | log resolved signals to the paper-trading ledger |
+| `LEDGER_PATH` | var/ledger.jsonl | where the ledger is written |
 | `QUOTEX_ACCOUNT` | PRACTICE | `PRACTICE` or `REAL` |
 | `QUOTEX_SESSION_FILE` | — | optional browser cookies JSON to skip the login |
 | `QUOTEX_PROXY` | — | optional residential proxy (`http://user:pass@host:port`) for datacenter hosts |
@@ -107,7 +109,21 @@ HTTP API, for scripts or a frontend of your own:
 - `GET /api/candles?pair=EURUSD&interval=5m&limit=500` (raw OHLCV for your own
   analysis, e.g. feeding an LLM)
 - `GET /api/backtest?pair=EURUSD&interval=5m` (the feed's walk-forward check)
+- `GET /api/ledger` (honest forward WIN/LOSS record of resolved signals)
 - `GET /api/config`, `GET /api/health`
+
+### Paper-trading ledger (the honest scoreboard)
+
+Walk-forward is a simulation. The ledger is the real thing: every signal that
+clears `MIN_CONF` is written to `var/ledger.jsonl` (JSON Lines) the moment the
+next candle closes, scored WIN or LOSS against the actual close. The dashboard's
+"Paper-trading ledger" panel and `GET /api/ledger` show the running win rate,
+ROI per trade, a per-pair/interval breakdown and the latest results. Nothing is
+traded. Leave a pair connected for a few days and this becomes the only number
+that matters — if the win rate stays under the 55.6% break-even of an 80% payout,
+the edge is not real yet. On Render, mount a disk and point `LEDGER_PATH` at it
+so redeploys do not wipe the record.
+
 
 The default TradingView source needs no connection setup. The Quotex source needs
 a residential connection: Cloudflare blocks the Quotex login from datacenter IPs.

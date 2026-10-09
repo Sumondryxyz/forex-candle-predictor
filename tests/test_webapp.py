@@ -130,3 +130,26 @@ def test_unsupported_interval_is_rejected(client):
     res = client.get("/api/live?pair=EURUSD&interval=3m")
     assert res.status_code == 400
     assert "unsupported interval" in res.get_json()["error"]
+
+
+def test_ledger_endpoint_returns_the_forward_record(client, monkeypatch, tmp_path):
+    from predictor import ledger as ledger_mod
+
+    led = ledger_mod.Ledger(path=str(tmp_path / "ledger.jsonl"), enabled=True)
+    led.record(
+        pair="EURUSD", interval="5m", source="tradingview", direction="UP",
+        confidence=0.7, entry_close=1.1, exit_close=1.1005, payout=0.8,
+    )
+    monkeypatch.setattr(webapp, "LEDGER", led)
+
+    body = client.get("/api/ledger").get_json()
+    assert body["trades"] == 1
+    assert body["wins"] == 1
+    assert body["roi"] == 80.0
+    assert body["path"].endswith("ledger.jsonl")
+
+
+def test_ledger_endpoint_rejects_bad_recent(client):
+    res = client.get("/api/ledger?recent=notanint")
+    assert res.status_code == 400
+

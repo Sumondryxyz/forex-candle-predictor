@@ -75,6 +75,15 @@ places trades. Live data comes from an unofficial TradingView chart websocket
 - LightGBM (`train_backtest.py`) and the linear engine are close; the live app
   keeps linear because it is lighter and has no compile step.
 
+## Paper-trading ledger
+- `predictor/ledger.py` + a module-level `LEDGER` in `feed.py`. When a signal
+  clears `MIN_CONF` and the next candle closes, `BaseFeed._ingest` appends one
+  JSONL row (direction, confidence, entry/exit, win, pnl) to `LEDGER_PATH`.
+- `GET /api/ledger` and the dashboard panel show win rate, ROI and a per-combo
+  split. This is the only honest forward measure; walk-forward is a simulation.
+- `Ledger.rows()` tolerates a truncated trailing line. Keep `LEDGER_PATH` on a
+  mounted disk in production so redeploys do not wipe the record.
+
 ## Upgrade attempts that did NOT hold up (do not repeat blindly)
 Measured out-of-sample on 60 days of EURUSD/GBPUSD/USDJPY 5m+15m. Every idea
 below looked promising in-sample and then failed the honest test:

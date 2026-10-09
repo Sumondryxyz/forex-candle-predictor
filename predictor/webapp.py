@@ -26,6 +26,7 @@ import threading
 from flask import Flask, jsonify, render_template, request
 
 from . import engine
+from .feed import LEDGER
 from .quotex_live import QuotexFeed
 from .tradingview_live import TradingViewFeed
 
@@ -179,6 +180,15 @@ def create_app() -> Flask:
             return jsonify(compute_backtest(pair, interval, source))
         except InputError as exc:
             return jsonify({"error": str(exc)}), 400
+
+    @app.get("/api/ledger")
+    def ledger_view():
+        """Honest forward record: every resolved paper signal and its WIN/LOSS."""
+        try:
+            recent = max(1, min(int(request.args.get("recent", 50)), 500))
+        except ValueError:
+            return jsonify({"error": "recent must be an integer"}), 400
+        return jsonify(LEDGER.summary(recent=recent))
 
     return app
 

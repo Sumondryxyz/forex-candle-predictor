@@ -18,10 +18,14 @@ from collections import deque
 from datetime import datetime, timezone
 
 from . import engine
+from .ledger import Ledger
 from .scheduler import interval_seconds, is_market_open, next_candle_open
 
 # How many closed candles to keep in memory (matches the CLI's rolling window).
 MAX_CANDLES = 6000
+
+# Every feed appends its resolved signals to the same paper-trading ledger.
+LEDGER = Ledger()
 
 
 def _env_float(name: str, default: float) -> float:
@@ -188,9 +192,21 @@ class BaseFeed:
 
                 if self._pending:
                     went_up = candle["close"] > self._pending["ref_close"]
+                    win = bool(went_up == (self._pending["dir"] == "UP"))
                     # bool()/float() strip numpy scalars, which Flask's jsonify
                     # cannot serialise (int64 -> 500 on /api/live).
-                    self._results.append(bool(went_up == (self._pending["dir"] == "UP")))
+                    self._results.append(win)
+                    LEDGER.record(
+                        pair=self.pair,
+                        interval=self.interval,
+                        source=self.source,
+                        direction=self._pending["dir"],
+                        confidence=self._pending["conf"],
+                        entry_close=self._pending["ref_close"],
+                        exit_close=candle["close"],
+                        payout=self.payout,
+                        candle_time=candle["time"],
+                    )
                     self._pending = None
 
             if added and self._model is not None:
@@ -205,7 +221,7 @@ class BaseFeed:
                 direction = "UP" if prob > 0.5 else "DOWN"
                 conf = max(prob, 1 - prob)
                 if conf >= self.min_conf:
-                    self._pending = {"dir": direction, "ref_close": c[-1]}
+                    self._pending = {"dir": direction, "ref_close": c[-1], "conf": conf}
                 self._updated = time.time()
         return added
 

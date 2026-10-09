@@ -27,3 +27,11 @@ services:
         value: EURUSD,GBPUSD,USDJPY,AUDUSD,USDCHF,USDCAD
       - key: WEB_INTERVALS
         value: 1m,5m,15m
+      - key: LEDGER_ENABLED
+        value: "1"
+      # Keep the paper-trading record across redeploys: a Render disk mounted at
+      # /var/data, with the ledger written inside it. On the free plan a disk is
+      # not available; the record then resets on deploy, which is acceptable for
+      # a demo but not for a long-running scoreboard.
+      - key: LEDGER_PATH
+        value: /var/data/ledger.jsonl

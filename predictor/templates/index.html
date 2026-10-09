@@ -79,6 +79,14 @@
   .pill { font-size: 11px; padding: 3px 9px; border-radius: 999px; border: 1px solid var(--line); color: var(--muted); }
   .pill.open { color: var(--up); border-color: rgba(34,197,94,.4); }
   .pill.closed { color: var(--warn); border-color: rgba(245,158,11,.4); }
+  .ledger-card { margin-top: 16px; }
+  .note-inline { text-transform: none; letter-spacing: 0; font-size: 11px; font-weight: 400; color: var(--muted); }
+  .stats { display: flex; gap: 28px; margin-bottom: 6px; }
+  .stats > div { font-size: 22px; font-weight: 700; }
+  .stats .k { font-size: 11px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); font-weight: 500; }
+  .sub-h { margin: 18px 0 6px; font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
+  .up { color: var(--up); }
+  .down { color: var(--down); }
   footer { margin-top: 26px; color: var(--muted); font-size: 12px; text-align: center; }
 </style>
 </head>
@@ -110,6 +118,7 @@
     </div>
     <button id="go">Connect live</button>
     <button id="bt" class="ghost">Run backtest</button>
+    <button id="lg" class="ghost">Refresh ledger</button>
     <span id="status" class="pill">ready</span>
   </div>
 
@@ -126,6 +135,12 @@
       <div id="backtest-err" class="err"></div>
     </section>
   </div>
+
+  <section class="card ledger-card">
+    <h2>Paper-trading ledger <span class="note-inline">honest forward WIN/LOSS record (no real trades)</span></h2>
+    <div id="ledger-body"><p class="note">Signals that clear the confidence filter are logged and scored against the next candle.</p></div>
+    <div id="ledger-err" class="err"></div>
+  </section>
 
   <footer>
     Predictions are probabilistic and often below break-even. Demo-trade first. Not financial advice.
@@ -307,9 +322,55 @@ async function loadBacktest() {
   } finally { $('bt').disabled = false; }
 }
 
+async function loadLedger() {
+  $('ledger-err').textContent = '';
+  $('lg').disabled = true; setStatus('loading ledger...');
+  try {
+    renderLedger(await getJSON('/api/ledger'));
+    setStatus('ledger ready');
+  } catch (e) {
+    $('ledger-err').textContent = e.message;
+    setStatus('error');
+  } finally { $('lg').disabled = false; }
+}
+
+function renderLedger(d) {
+  if (!d.trades) {
+    $('ledger-body').innerHTML = `<p class="note">No resolved signals yet. The feed logs each
+      signal that clears the confidence filter once the next candle closes, then scores it WIN or LOSS.
+      Leave a pair connected and this fills in every candle.</p>`;
+    return;
+  }
+  const comboRows = (d.by_combo || []).map(c => `<tr><td>${c.combo}</td><td>${c.trades}</td>
+      <td>${c.wins}-${c.losses}</td><td class="${c.roi >= 0 ? 'up' : 'down'}">${c.win_rate}%</td>
+      <td class="${c.roi >= 0 ? 'up' : 'down'}">${c.roi >= 0 ? '+' : ''}${c.roi}%</td></tr>`).join('');
+  const recentRows = (d.recent || []).slice(0, 12).map(r => `<tr><td>${r.pair} ${r.interval}</td>
+      <td class="${r.direction === 'UP' ? 'up' : 'down'}">${r.direction}</td>
+      <td>${(r.confidence * 100).toFixed(1)}%</td>
+      <td class="${r.win ? 'up' : 'down'}">${r.win ? 'WIN' : 'LOSS'}</td>
+      <td>${r.pnl > 0 ? '+' : ''}${r.pnl.toFixed(2)}</td></tr>`).join('');
+  const overallClass = d.roi >= 0 ? 'up' : 'down';
+  $('ledger-body').innerHTML = `
+    <div class="stats">
+      <div><div class="k">trades</div>${d.trades}</div>
+      <div><div class="k">win rate</div><span class="${d.win_rate >= 55.6 ? 'up' : 'down'}">${d.win_rate}%</span></div>
+      <div><div class="k">ROI / trade</div><span class="${overallClass}">${d.roi >= 0 ? '+' : ''}${d.roi}%</span></div>
+    </div>
+    <p class="note">Forward record across ${d.by_combo.length} connected combo(s). Break-even at an
+    80% payout is 55.6%; below that a bet loses money over time. This only proves an edge after many
+    trades — treat small counts as noise.</p>
+    <table><thead><tr><th>combo</th><th>trades</th><th>W-L</th><th>win rate</th><th>ROI</th></tr></thead>
+    <tbody>${comboRows}</tbody></table>
+    <h3 class="sub-h">Latest resolved signals</h3>
+    <table><thead><tr><th>combo</th><th>call</th><th>conf</th><th>result</th><th>PnL</th></tr></thead>
+    <tbody>${recentRows}</tbody></table>`;
+}
+
 $('go').addEventListener('click', loadSignal);
 $('bt').addEventListener('click', loadBacktest);
+$('lg').addEventListener('click', loadLedger);
 loadSignal();
+loadLedger();
 </script>
 </body>
 </html>
