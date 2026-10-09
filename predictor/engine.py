@@ -39,6 +39,11 @@ except ImportError:  # pragma: no cover - platform dependent
 
 _LINEAR = _PANDAS and _SKLEARN
 _LR_C = float(os.getenv("MODEL_C", "0.1"))
+# Isotonic-calibrate the linear model on a held-out tail so a reported 0.60
+# confidence means roughly a 60% hit rate (signals are filtered on confidence).
+_CALIBRATE = os.getenv("MODEL_CALIBRATE", "1").lower() not in {"0", "false", "no"}
+_CALIB_MIN = int(os.getenv("MODEL_CALIB_MIN", "1500"))
+
 
 
 def ema(values, span):
@@ -256,9 +261,24 @@ def _train_linear(X, c):
     idx = np.flatnonzero(usable)
     if len(idx) < 300 or len(np.unique(y[idx])) < 2:
         return None
-    clf = make_pipeline(StandardScaler(), LogisticRegression(C=_LR_C, max_iter=2000))
-    clf.fit(X[idx], y[idx])
-    return LinearModel(clf)
+    base = make_pipeline(StandardScaler(), LogisticRegression(C=_LR_C, max_iter=2000))
+    if _CALIBRATE and len(idx) >= _CALIB_MIN:
+        split = int(len(idx) * 0.8)
+        fit_idx, cal_idx = idx[:split], idx[split:]
+        if len(np.unique(y[fit_idx])) >= 2 and len(np.unique(y[cal_idx])) >= 2:
+            base.fit(X[fit_idx], y[fit_idx])
+            try:
+                from sklearn.calibration import CalibratedClassifierCV
+                from sklearn.frozen import FrozenEstimator
+
+                cal = CalibratedClassifierCV(FrozenEstimator(base), method="isotonic")
+                cal.fit(X[cal_idx], y[cal_idx])
+                return LinearModel(cal)
+            except Exception:  # noqa: BLE001 - fall back to the raw scores
+                base.fit(X[fit_idx], y[fit_idx])
+                return LinearModel(base)
+    base.fit(X[idx], y[idx])
+    return LinearModel(base)
 
 
 def train(X, c, seeds=5):

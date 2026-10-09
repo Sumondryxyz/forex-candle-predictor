@@ -74,3 +74,30 @@ def test_numpy_fallback_backend_still_works(monkeypatch):
     model = engine.train(X, c)
     assert isinstance(model, engine.Ensemble)
     assert 0.0 <= float(model.prob(X[-1:])[0]) <= 1.0
+
+
+def test_pandas_labels_stay_aligned_with_the_pandas_or_numpy_backend():
+    # The pandas backend derives both features and labels from the same frame, so
+    # every training row must have a real next-candle direction to learn from.
+    rows = _candles(800, seed=7)
+    o, h, low, c, t = engine.arrays(rows)
+    X = engine.features(o, h, low, c, t)
+    y, usable = engine.labels(c)
+    assert X.shape[0] == len(c) == len(y) == len(usable)
+    assert not usable[-1]  # last candle has no successor
+
+
+def test_linear_model_is_calibrated_when_enough_history(monkeypatch):
+    # A calibrated linear model must still expose prob() in [0, 1]; this guards
+    # the scikit-learn >=1.6 calibration path (FrozenEstimator, not cv="prefit").
+    monkeypatch.setattr(engine, "_CALIBRATE", True)
+    monkeypatch.setattr(engine, "_CALIB_MIN", 300)
+    rows = _candles(1500, seed=11)
+    o, h, low, c, t = engine.arrays(rows)
+    X = engine.features(o, h, low, c, t)
+    model = engine.train(X, c)
+    assert isinstance(model, engine.LinearModel)
+    p = model.prob(X[-5:])
+    assert p.shape == (5,)
+    assert np.all((p >= 0) & (p <= 1))
+

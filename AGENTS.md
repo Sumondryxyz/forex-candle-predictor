@@ -59,3 +59,19 @@ places trades. Live data comes from an unofficial TradingView chart websocket
 - Build verified with `sudo docker build -f deploy/Dockerfile.render .`; the
   container boots gunicorn on `$PORT` (default 10000) and serves live signals.
 
+## Model tuning (measured 2026-10)
+- `research_sweep.py` is the reproducible harness: `python research_sweep.py
+  --pairs EURUSD,GBPUSD,USDJPY --intervals 5m,15m --days 60`. Compare a
+  candidate change on the SAME data before shipping.
+- Heterogeneous edge is the norm: EURUSD/GBPUSD 5m-15m carry a small edge,
+  USDJPY 15m was a coin-flip. Never trust one pair/interval.
+- Default `MIN_CONF` is 0.65, not 0.60: 5 of 6 combos are net-positive at 0.65
+  vs 3 of 6 at 0.60. Fewer signals, better ROI.
+- `engine._train_linear` isotonic-calibrates on a held-out tail (80/20) when
+  history >= `MODEL_CALIB_MIN` (1500). Set `MODEL_CALIBRATE=0` to disable.
+  Calibration helps overall but hurt GBPUSD 15m - expected, not a bug.
+- scikit-learn >= 1.6 removed `CalibratedClassifierCV(cv="prefit")`; use
+  `FrozenEstimator(base)`. `predictor/model.py` handles both.
+- LightGBM (`train_backtest.py`) and the linear engine are close; the live app
+  keeps linear because it is lighter and has no compile step.
+

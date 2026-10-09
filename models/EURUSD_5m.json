@@ -1,58 +1,58 @@
 {
-  "samples": 8430,
-  "overall_accuracy_pct": 52.7,
-  "always_majority_baseline_pct": 51.07,
-  "up_rate_pct": 48.93,
+  "samples": 1911,
+  "overall_accuracy_pct": 50.92,
+  "always_majority_baseline_pct": 52.12,
+  "up_rate_pct": 47.88,
   "breakeven_accuracy_pct": 55.56,
   "by_confidence": [
     {
       "min_confidence": 0.5,
-      "signals": 8430,
+      "signals": 1911,
       "coverage_pct": 100.0,
-      "accuracy_pct": 52.7,
-      "roi_pct_per_trade": -5.13
+      "accuracy_pct": 50.92,
+      "roi_pct_per_trade": -8.35
     },
     {
       "min_confidence": 0.55,
-      "signals": 1368,
-      "coverage_pct": 16.23,
-      "accuracy_pct": 58.7,
-      "roi_pct_per_trade": 5.66
+      "signals": 449,
+      "coverage_pct": 23.5,
+      "accuracy_pct": 53.9,
+      "roi_pct_per_trade": -2.98
     },
     {
       "min_confidence": 0.6,
-      "signals": 384,
-      "coverage_pct": 4.56,
-      "accuracy_pct": 60.42,
-      "roi_pct_per_trade": 8.75
+      "signals": 190,
+      "coverage_pct": 9.94,
+      "accuracy_pct": 58.95,
+      "roi_pct_per_trade": 6.11
     },
     {
       "min_confidence": 0.65,
-      "signals": 119,
-      "coverage_pct": 1.41,
-      "accuracy_pct": 65.55,
-      "roi_pct_per_trade": 17.98
+      "signals": 91,
+      "coverage_pct": 4.76,
+      "accuracy_pct": 50.55,
+      "roi_pct_per_trade": -9.01
     },
     {
       "min_confidence": 0.7,
-      "signals": 59,
-      "coverage_pct": 0.7,
-      "accuracy_pct": 71.19,
-      "roi_pct_per_trade": 28.14
+      "signals": 49,
+      "coverage_pct": 2.56,
+      "accuracy_pct": 57.14,
+      "roi_pct_per_trade": 2.86
     },
     {
       "min_confidence": 0.75,
-      "signals": 48,
-      "coverage_pct": 0.57,
-      "accuracy_pct": 75.0,
-      "roi_pct_per_trade": 35.0
+      "signals": 34,
+      "coverage_pct": 1.78,
+      "accuracy_pct": 64.71,
+      "roi_pct_per_trade": 16.47
     },
     {
       "min_confidence": 0.8,
-      "signals": 30,
-      "coverage_pct": 0.36,
-      "accuracy_pct": 70.0,
-      "roi_pct_per_trade": 26.0
+      "signals": 28,
+      "coverage_pct": 1.47,
+      "accuracy_pct": 75.0,
+      "roi_pct_per_trade": 35.0
     }
   ]
 }

@@ -193,23 +193,42 @@ boosted trees actually do *worse* here than a plain regularised linear model:
 trees memorise the noise and sit at ~51%, while the linear model keeps a small,
 real edge once you filter on confidence.
 
-Strict rolling walk-forward on EURUSD 5m (train on a trailing window, predict
-only forward, never see the candle being predicted):
+Strict rolling walk-forward, 60 days of 5m/15m candles per pair, the linear
+engine used by the live feed, isotonic calibration on. Hit rate and ROI per
+trade at an 80% payout (break-even is 55.6%):
 
-| Confidence filter | Signals | Accuracy | ROI per trade @80% payout |
-|---|---|---|---|
-| all candles | 2464 | 52.2% | −6.0% |
-| ≥ 0.55 | 1140 (46%) | 55.9% | +0.6% |
-| ≥ 0.60 | 429 (17%) | 58.0% | +4.4% |
-| ≥ 0.65 | 174 (7%) | 55.2% | −0.6% |
-| ≥ 0.70 | 74 (3%) | 55.4% | −0.3% |
+| pair + interval | ≥0.60 signals | hit% | ROI% | ≥0.65 signals | hit% | ROI% |
+|---|---|---|---|---|---|---|
+| EURUSD 5m  | 306 (12%) | 56.9 | +2.4  | 140 (6%) | 61.4 | +10.6 |
+| EURUSD 15m | 377 (15%) | 53.9 | −3.1  | 167 (7%) | 59.9 | +7.8  |
+| GBPUSD 5m  | 209 (8%)  | 57.9 | +4.2  | 131 (5%) | 56.5 | +1.7  |
+| GBPUSD 15m | 663 (26%) | 56.1 | +1.0  | 146 (6%) | 58.2 | +4.8  |
+| USDJPY 5m  | 66 (3%)   | 62.1 | +11.8 | 45 (2%)  | 57.8 | +4.0  |
+| USDJPY 15m | 212 (8%)  | 51.4 | −7.5  | 78 (3%)  | 51.3 | −7.7  |
 
-The realistic path to a higher hit rate is **selectivity**: skip most candles
-and take only the subset where the model is confident. The robust result is the
-~56–58% band at ≥0.55/0.60, which clears the 55.6% break-even of an 80%-payout
-binary option. The ≥0.65/0.70 buckets rest on fewer trades and swing around, so
-treat them as noisy — the dashboard now prints this whole sweep so you can judge
-it yourself. GBPUSD 15m behaves similarly (58.5% at ≥0.60 over 634 trades).
+Read this honestly, not as a promise:
+
+- The edge lives in **selectivity**. At the default floor of **0.65** the ROI is
+  net-positive on 5 of 6 combos; at 0.60 only 3 of 6. So the app now defaults to
+  0.65 (fewer signals, but the ones it prints are more likely right).
+- It is **not uniformly good**. USDJPY 15m has no edge here (−7.7% at 0.65), and
+  GBPUSD 15m is the one combo that got *worse* under calibration (4.2 → 1.0 at
+  0.60). A single pair can be a coin-flip; never act on one combo.
+- The linear engine and a calibrated LightGBM (`train_backtest.py`) are close and
+  trade places per combo (e.g. EURUSD 5m favours the GBM at ≥0.75). Neither is
+  clearly better, so the lightweight linear model stays the default.
+- Confidence now means something: with isotonic calibration a printed 0.65 is
+  close to a 65% hit rate on the calibration tail, so the ≥0.65/0.70 buckets
+  really do score higher. The dashboard prints the whole walk-forward sweep, so
+  judge it on your own data. Trade a demo account until your WIN/LOSS count says
+  otherwise. Expect roughly 56–61% on the filtered signals.
+
+`research_sweep.py` reproduces the table above:
+
+```bash
+python research_sweep.py --pairs EURUSD,GBPUSD,USDJPY --intervals 5m,15m --days 60
+```
+
 
 The engine picks its backend automatically: **linear** (35 causal features, a
 regularised logistic regression) when pandas + scikit-learn are importable, and

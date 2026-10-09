@@ -11,6 +11,11 @@ import pandas as pd
 from sklearn.calibration import CalibratedClassifierCV
 from sklearn.ensemble import HistGradientBoostingClassifier
 
+try:  # FrozenEstimator replaced cv="prefit" in scikit-learn 1.6.
+    from sklearn.frozen import FrozenEstimator
+except ImportError:  # pragma: no cover - older scikit-learn
+    FrozenEstimator = None
+
 try:  # LightGBM has no wheels on Android/Termux, fall back to scikit-learn there.
     import lightgbm as lgb
 except ImportError:  # pragma: no cover - platform dependent
@@ -76,7 +81,10 @@ def train(X: pd.DataFrame, y: pd.Series, calibrate: bool = True):
         return base
     cutoff = int(len(X) * 0.8)
     base.fit(X.iloc[:cutoff], y.iloc[:cutoff])
-    calibrated = CalibratedClassifierCV(base, method="isotonic", cv="prefit")
+    if FrozenEstimator is not None:
+        calibrated = CalibratedClassifierCV(FrozenEstimator(base), method="isotonic")
+    else:  # pragma: no cover - older scikit-learn
+        calibrated = CalibratedClassifierCV(base, method="isotonic", cv="prefit")
     calibrated.fit(X.iloc[cutoff:], y.iloc[cutoff:])
     return calibrated
 
