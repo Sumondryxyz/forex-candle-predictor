@@ -1,6 +1,7 @@
 import numpy as np
 
 from predictor import engine
+from predictor.features import FEATURE_COLUMNS
 
 
 def _candles(n: int = 1200, seed: int = 0):
@@ -112,4 +113,25 @@ def test_linear_model_is_calibrated_when_enough_history(monkeypatch):
     p = model.prob(X[-5:])
     assert p.shape == (5,)
     assert np.all((p >= 0) & (p <= 1))
+
+
+
+def test_volumes_reads_the_volume_key_and_defaults_to_zero():
+    rows = [
+        {"time": 1, "open": 1.0, "high": 1.1, "low": 0.9, "close": 1.0, "volume": 120.0},
+        {"time": 2, "open": 1.0, "high": 1.1, "low": 0.9, "close": 1.0},
+    ]
+    assert list(engine.volumes(rows)) == [120.0, 0.0]
+
+
+def test_constant_volume_neutralises_the_vol_ratio_feature():
+    # A steady volume stream carries no information: vol_ratio must stay 1.0
+    # whether the column is passed or not, so it cannot inject noise.
+    rows = _candles(400, seed=5)
+    o, h, low, c, t = engine.arrays(rows)
+    flat = engine.features(o, h, low, c, t, np.full(len(c), 0.0))
+    steady = engine.features(o, h, low, c, t, np.full(len(c), 250.0))
+    vol_idx = list(FEATURE_COLUMNS).index("vol_ratio")
+    assert np.allclose(flat[60:, vol_idx], 1.0)
+    assert np.allclose(steady[60:, vol_idx], 1.0)
 

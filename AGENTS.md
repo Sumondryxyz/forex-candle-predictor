@@ -139,3 +139,18 @@ The high thresholds were the real lever: base35 pooled hit rises 57.1% (0.70)
   the signal at the new floor. The 0.85+ range is where the honest hit rate is
   ~59-60%, at the cost of fewer signals.
 
+## TradingView volume — wired but off by default (`USE_VOLUME`)
+- TradingView DOES report per-bar volume (nonzero "tick volume", ~600-1600 on
+  EURUSD 5m). `predictor/sources/tradingview.py` already parsed it.
+- It was silently dropped: `engine.arrays()` never returned volume and
+  `engine._features_pandas` hard-coded `volume=zeros`. Now `engine.volumes()`
+  extracts it and `engine.features(o,h,low,c,t,v)` threads it through.
+  `BaseFeed.use_volume = _env_flag("USE_VOLUME")` gates it; default OFF.
+- Honest A/B (90d, 6 pairs, 5m+15m, pooled out-of-sample): rich volume block
+  (vol_z, vol_trend, vol_pressure buy/sell, vol_climax, vol_efficiency) looked
+  +2.6pt at 0.70, but the early/late split disagreed (early HIGH floors lost,
+  late won) and per-combo on the late half across 5 intervals it was
+  **12 wins / 14 losses / 4 ties** at 0.75. Small-n combos (n=1-10) swung the
+  pooled number. Verdict: tick volume is NOT a reliable edge here. Shipped as
+  opt-in only; do not flip the default without a fresh, broad confirmation.
+

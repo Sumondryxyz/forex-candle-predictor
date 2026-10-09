@@ -136,7 +136,7 @@ def _features_numpy(o, h, low, c, times=None):
     return np.nan_to_num(X, nan=0.0, posinf=0.0, neginf=0.0)
 
 
-def _features_pandas(o, h, low, c, times):
+def _features_pandas(o, h, low, c, times, v=None):
     """35 causal features, reusing ``predictor.features`` (one source of truth)."""
     from .features import FEATURE_COLUMNS, build_features
 
@@ -146,7 +146,14 @@ def _features_pandas(o, h, low, c, times):
         else pd.RangeIndex(len(c))
     )
     df = pd.DataFrame(
-        {"open": o, "high": h, "low": low, "close": c, "volume": np.zeros(len(c))}, index=idx
+        {
+            "open": o,
+            "high": h,
+            "low": low,
+            "close": c,
+            "volume": np.zeros(len(c)) if v is None else np.asarray(v, float),
+        },
+        index=idx,
     )
     X = build_features(df)[FEATURE_COLUMNS].to_numpy(float)
     X[:50] = 0.0
@@ -158,10 +165,10 @@ def backend_name() -> str:
     return "linear" if _LINEAR else "numpy"
 
 
-def features(o, h, low, c, times=None):
+def features(o, h, low, c, times=None, v=None):
     """Causal features: row i only uses candles up to and including i."""
     if _PANDAS:
-        return _features_pandas(o, h, low, c, times)
+        return _features_pandas(o, h, low, c, times, v)
     return _features_numpy(o, h, low, c, times)
 
 
@@ -381,3 +388,8 @@ def arrays(candles):
     c = np.array([x["close"] for x in candles], float)
     t = np.array([x["time"] for x in candles], float)
     return o, h, low, c, t
+
+
+def volumes(candles):
+    """Per-candle volume (0.0 when the source does not report it)."""
+    return np.array([float(x.get("volume") or 0.0) for x in candles], float)

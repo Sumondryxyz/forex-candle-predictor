@@ -135,6 +135,14 @@ def test_ingest_ignores_duplicate_and_incomplete_candles():
     assert feed.snapshot()["candles"] == dup
 
 
+
+def test_use_volume_flag_defaults_off_and_can_be_enabled(monkeypatch):
+    monkeypatch.delenv("USE_VOLUME", raising=False)
+    assert QuotexFeed("EURUSD", "5m").use_volume is False
+    monkeypatch.setenv("USE_VOLUME", "true")
+    assert QuotexFeed("EURUSD", "5m").use_volume is True
+
+
 def test_short_history_raises():
     feed = QuotexFeed("EURUSD", "1m")
     try:

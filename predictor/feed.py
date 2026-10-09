@@ -42,6 +42,13 @@ def _env_int(name: str, default: int) -> int:
         return default
 
 
+def _env_flag(name: str, default: bool = False) -> bool:
+    raw = os.getenv(name)
+    if raw is None:
+        return default
+    return raw.strip().lower() in {"1", "true", "yes", "on"}
+
+
 class BaseFeed:
     """Background poller holding the latest signal for one pair/interval."""
 
@@ -60,6 +67,11 @@ class BaseFeed:
         self.payout = _env_float("PAYOUT", 0.80)
         self.history_hours = _env_int("HISTORY_HOURS", 72)
         self.retrain_every = _env_int("RETRAIN_EVERY", 60)
+        # TradingView reports tick volume, so the volume features *can* be fed
+        # in -- but an honest A/B (90d, 6 pairs, 5 intervals) showed no reliable
+        # gain (per-combo late-half: 12 wins, 14 losses), so it is opt-in and
+        # off by default. See AGENTS.md.
+        self.use_volume = _env_flag("USE_VOLUME", False)
         self.account = "-"
         self._client_factory = client_factory or self._default_client
 
@@ -147,7 +159,7 @@ class BaseFeed:
             return out
 
         o, h, low, c, t = engine.arrays(candles)
-        X = engine.features(o, h, low, c, t)
+        X = engine.features(o, h, low, c, t, engine.volumes(candles) if self.use_volume else None)
         prob = float(model.prob(X[-1:])[0])
         direction = "UP" if prob > 0.5 else "DOWN"
         conf = max(prob, 1 - prob)
@@ -243,7 +255,10 @@ class BaseFeed:
 
             if added and self._model is not None:
                 o, h, low, c, t = engine.arrays(self._candles)
-                X = engine.features(o, h, low, c, t)
+                X = engine.features(
+                    o, h, low, c, t,
+                    engine.volumes(self._candles) if self.use_volume else None,
+                )
                 if self._since_retrain >= self.retrain_every:
                     refreshed = engine.train(X, c)
                     if refreshed is not None:
@@ -280,7 +295,9 @@ class BaseFeed:
             )
 
         o, h, low, c, t = engine.arrays(candles)
-        X = engine.features(o, h, low, c, t)
+        X = engine.features(
+            o, h, low, c, t, engine.volumes(candles) if self.use_volume else None
+        )
         model = engine.train(X, c)
         if model is None:
             raise RuntimeError("not enough usable candles to train the model")
