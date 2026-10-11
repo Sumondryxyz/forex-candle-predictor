@@ -93,7 +93,16 @@ def _make_get_settings(host: str):
 
 
 def apply(host: str = DEFAULT_HOST) -> None:
-    """Monkey-patch pyquotex. Safe to call repeatedly."""
+    """Monkey-patch pyquotex. Safe to call repeatedly.
+
+    Patches three things the stock client gets wrong against the current site:
+
+    * ``Login.base_url`` is hard-coded to ``qxbroker.com``; accounts now live on
+      ``market-qx.trade``, so the sign-in page must be fetched from ``host``.
+    * ``Response.reason_phrase`` does not exist on curl_cffi's response, which
+      crashes the error path (an AttributeError instead of the real 403).
+    * the login/settings flow as described at the top of this module.
+    """
     global _applied
     if _applied:
         return
@@ -103,4 +112,10 @@ def apply(host: str = DEFAULT_HOST) -> None:
 
     navigator.Browser.get_cookies = _get_cookies
     Login.get_settings = _make_get_settings(host)
+    Login.base_url = host
+    Login.https_base_url = f"https://{host}"
+    if not hasattr(navigator.Response, "reason_phrase"):
+        navigator.Response.reason_phrase = property(
+            lambda self: getattr(self, "reason", "") or ""
+        )
     _applied = True

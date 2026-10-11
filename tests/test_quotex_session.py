@@ -47,3 +47,26 @@ def test_non_object_session_is_rejected(tmp_path):
     path = _write(tmp_path, ["not", "an", "object"])
     with pytest.raises(TypeError, match="not a JSON object"):
         load_session(path)
+
+
+def test_apply_points_login_at_the_configured_host():
+    """qxbroker.com is hard-coded upstream; apply() must retarget it."""
+    pyquotex = pytest.importorskip("pyquotex")
+    from predictor import quotex_session
+    from pyquotex.network.login import Login
+
+    quotex_session._applied = False
+    quotex_session.apply("market-qx.trade")
+    assert Login.base_url == "market-qx.trade"
+    assert Login.https_base_url == "https://market-qx.trade"
+
+
+def test_apply_adds_a_reason_phrase_shim():
+    """curl_cffi responses have no reason_phrase; the login error path needs it."""
+    pytest.importorskip("pyquotex")
+    from predictor import quotex_session
+    from pyquotex.network import navigator
+
+    quotex_session._applied = False
+    quotex_session.apply("market-qx.trade")
+    assert isinstance(getattr(navigator.Response, "reason_phrase", None), property)
