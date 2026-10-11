@@ -172,3 +172,17 @@ The high thresholds were the real lever: base35 pooled hit rises 57.1% (0.70)
   pooled number. Verdict: tick volume is NOT a reliable edge here. Shipped as
   opt-in only; do not flip the default without a fresh, broad confirmation.
 
+
+## Phone login → session capture (no PC)
+- Quotex's login page is what Cloudflare blocks from datacenter IPs. The phone
+  (residential IP) does the login; a userscript forwards the session.
+- `scripts/session_capture.py` serves a loopback-only page (`127.0.0.1:8787`):
+  `/` (instructions), `/capture.user.js`, `POST /save`, `GET /status`.
+- `tools/quotex-session-capture.user.js` (Kiwi + Tampermonkey) reads the token
+  from `/api/v1/cabinets/digest` and cookies with `GM_cookie` — `document.cookie`
+  cannot see the HttpOnly `laravel_session` / `cf_clearance`, so GM_cookie is
+  required, not optional. It polls because Quotex is a SPA (login has no reload).
+- Pure logic lives in `predictor/session_capture.py` (normalize/build/save), so it
+  is unit-tested without a browser. The written layout matches what
+  `predictor/quotex_session.load_session` already reads (flat or email-keyed).
+- Never commit `session.json`; it holds a bearer token. It is gitignored.
