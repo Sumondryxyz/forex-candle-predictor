@@ -215,7 +215,9 @@ app = create_app()
 
 
 def main() -> None:
-    port = int(os.getenv("PORT", "5000"))
+    # SERVER_PORT first: Botkeep (and other PaaS panels) publish the HTTP port
+    # there, while Render/Heroku use PORT.
+    port = int(os.getenv("SERVER_PORT") or os.getenv("PORT") or "5000")
     app.run(host=os.getenv("HOST", "0.0.0.0"), port=port, debug=os.getenv("FLASK_DEBUG") == "1")
 
 
