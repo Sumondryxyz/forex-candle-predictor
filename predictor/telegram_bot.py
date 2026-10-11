@@ -147,8 +147,32 @@ def format_signal(snap: dict) -> str:
     if sess.get("signals"):
         body.append(f"Paper record: {sess.get('wins')}/{sess.get('signals')} "
                     f"({sess.get('rate')}%)")
+    res = snap.get("last_result") or {}
+    if res:
+        mark = "✅WIN" if res.get("win") else "❌LOSS"
+        body.append(f"Last call: {mark} ({res.get('direction')} "
+                    f"{_pct(res.get('confidence'))})")
     body.append(f"<i>{html.escape(str(snap.get('source')))} · no trades are placed</i>")
     return "\n".join(body)
+
+
+def format_result(snap: dict) -> str:
+    """How the previous call actually closed — the WIN/LOSS check."""
+    pair = html.escape(snap.get("pair", "?"))
+    interval = html.escape(snap.get("interval", "?"))
+    res = snap.get("last_result")
+    if not res:
+        return f"<b>{pair} {interval}</b>\nNo resolved signal yet."
+    direction = res.get("direction")
+    arrow = "🟢 UP" if direction == "UP" else "🔴 DOWN"
+    mark = "✅ <b>WIN</b>" if res.get("win") else "❌ <b>LOSS</b>"
+    return "\n".join([
+        f"<b>{pair} · {interval}</b>",
+        f"Last call: {arrow} at {_pct(res.get('confidence'))}",
+        f"Result: {mark}",
+        f"Entry {res.get('entry_close')} → exit {res.get('exit_close')}",
+        f"<i>resolved {html.escape(str(res.get('resolved_at'))[11:19])} UTC · paper only</i>",
+    ])
 
 
 def format_scan(snaps: list[dict]) -> str:
@@ -174,6 +198,7 @@ HELP = (
     "It never places a trade.\n\n"
     "<b>Commands</b>\n"
     "/signal [PAIR] [INTERVAL] — one pair, e.g. <code>/signal EURUSD 5m</code>\n"
+    "/result [PAIR] [INTERVAL] — how the previous call closed (WIN/LOSS)\n"
     "/scan — every configured pair at your interval\n"
     "/session — paper WIN/LOSS record\n"
     "/pairs — available pairs and intervals\n"
@@ -197,8 +222,9 @@ def handle(tg: Telegram, state: State, msg: dict) -> None:
     args = parts[1:]
 
     prefs = state.get(chat_id)
-    pair = (args[0].upper() if args and cmd == "/signal" else None) or prefs.get("pair") or _pairs()[0]
-    interval = (args[1] if len(args) > 1 and cmd == "/signal" else None) or prefs.get("interval") or _intervals()[0]
+    takes_pair = cmd in ("/signal", "/result")
+    pair = (args[0].upper() if args and takes_pair else None) or prefs.get("pair") or _pairs()[0]
+    interval = (args[1] if len(args) > 1 and takes_pair else None) or prefs.get("interval") or _intervals()[0]
 
     if cmd in ("/start", "/help"):
         tg.send(chat_id, HELP)
@@ -266,6 +292,13 @@ def handle(tg: Telegram, state: State, msg: dict) -> None:
         tg.send(chat_id, format_signal(_safe_snapshot(pair, interval)))
         return
 
+    if cmd == "/result":
+        if pair not in _pairs():
+            tg.send(chat_id, f"Unknown pair {html.escape(pair)}. Pairs: " + ", ".join(_pairs()))
+            return
+        tg.send(chat_id, format_result(_safe_snapshot(pair, interval)))
+        return
+
     if cmd == "/scan":
         snaps = [_safe_snapshot(p, interval) for p in _pairs()]
         tg.send(chat_id, format_scan(snaps))
@@ -290,6 +323,16 @@ def push_loop(tg: Telegram, state: State, stop: threading.Event) -> None:
             pair = prefs.get("pair") or _pairs()[0]
             interval = prefs.get("interval") or _intervals()[0]
             snap = _safe_snapshot(pair, interval)
+
+            # Announce how the previous call closed, once per resolution.
+            res = snap.get("last_result") or {}
+            resolved_at = res.get("resolved_at")
+            if resolved_at and state.get(chat_id).get("last_result") != resolved_at:
+                mark = "✅ WIN" if res.get("win") else "❌ LOSS"
+                tg.send(chat_id, f"🔔 {mark} — {html.escape(str(pair))} "
+                                 f"{html.escape(str(res.get('direction') or ''))} call resolved.")
+                state.update(chat_id, last_result=resolved_at)
+
             marker = snap.get("signal_candle_open")
             if not snap.get("tradeable") or not marker:
                 continue

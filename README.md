@@ -88,11 +88,44 @@ TELEGRAM_BOT_TOKEN=123:abc python bot.py
 | `/status` | your current settings |
 
 The bot **never places a trade**. Auto-push sends at most one message per candle
-(`PUSH_INTERVAL` seconds between checks, default 30).
+(`PUSH_INTERVAL` seconds between checks, default 30) and announces each result
+once, as ✅ WIN or ❌ LOSS.
 
 > ⚠️ Quotex blocks logins from datacenter IPs. If you host the bot, keep
 > `DATA_SOURCE=tradingview` (no login needed) or run it from a home/mobile
 > connection.
+
+### Phone-only setup (Termux)
+
+No PC needed. From the repository root:
+
+```bash
+bash scripts/install-termux.sh   # installs everything, writes .env
+# edit .env: set TELEGRAM_BOT_TOKEN (and Quotex creds if you use them)
+set -a; . ./.env; set +a
+python bot.py
+```
+
+To keep it running after a reboot, install the **Termux:Boot** app, then
+`mkdir -p ~/.termux/boot && cp scripts/termux-boot.sh ~/.termux/boot/` and
+disable battery optimisation for Termux.
+
+### Quotex session without a PC
+
+Cloudflare blocks the Quotex *login page* from datacenter IPs, so the reliable
+way in is a session exported from a browser you are already logged into:
+
+1. Open `tools/quotex-session-helper.html` on your phone (Kiwi Browser works).
+2. Run the bookmarklet on the logged-in Quotex tab to get `token` + `user_agent`.
+3. Export cookies with the **Cookie-Editor** extension and paste them in.
+4. Save the generated JSON as `session.json` and validate it:
+
+```bash
+python scripts/check_quotex_session.py session.json
+```
+
+Then run with `QUOTEX_SESSION_FILE=session.json DATA_SOURCE=quotex python bot.py`.
+The token is like a password: never commit it or share it.
 
 ### Data sources
 

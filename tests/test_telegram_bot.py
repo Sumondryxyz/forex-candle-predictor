@@ -31,6 +31,10 @@ def _snap(**kw):
         "candles": 240, "payout": 0.85,
         "signal_candle_open": "2026-10-05T17:45:00+00:00",
         "session": {"signals": 4, "wins": 3, "rate": 75.0},
+        "last_result": {
+            "direction": "UP", "confidence": 0.81, "entry_close": 1.0851,
+            "exit_close": 1.0855, "win": True, "resolved_at": "2026-10-05T17:45:00+00:00",
+        },
     }
     base.update(kw)
     return base
@@ -66,6 +70,52 @@ def test_format_scan_lists_pairs():
     out = tb.format_scan([_snap(), _snap(pair="GBPUSD", direction="DOWN", tradeable=False)])
     assert "EURUSD" in out and "GBPUSD" in out
     assert "🟢UP" in out and "🔴DOWN" in out
+
+
+def test_format_signal_includes_last_result():
+    out = tb.format_signal(_snap())
+    assert "Last call: ✅WIN" in out
+
+
+def test_format_result_win_and_loss():
+    win = tb.format_result(_snap())
+    assert "WIN" in win and "1.0851" in win and "1.0855" in win
+    loss = tb.format_result(_snap(last_result={
+        "direction": "DOWN", "confidence": 0.72, "entry_close": 1.1,
+        "exit_close": 1.2, "win": False, "resolved_at": "2026-10-05T17:50:00+00:00"}))
+    assert "LOSS" in loss and "🔴 DOWN" in loss
+
+
+def test_format_result_none_yet():
+    out = tb.format_result(_snap(last_result=None))
+    assert "No resolved signal yet" in out
+
+
+def test_result_command(state, monkeypatch):
+    monkeypatch.setattr(tb, "_safe_snapshot", lambda p, i: _snap())
+    tg = FakeTelegram()
+    tb.handle(tg, state, _msg("/result EURUSD 5m"))
+    assert "WIN" in tg.sent[-1][1]
+
+
+def test_push_announces_result_once(state, monkeypatch):
+    monkeypatch.setattr(tb, "PUSH_INTERVAL", 0.01)
+    monkeypatch.setattr(tb, "_pairs", lambda: ["EURUSD"])
+    monkeypatch.setattr(tb, "_intervals", lambda: ["5m"])
+    monkeypatch.setattr(tb, "_safe_snapshot", lambda p, i: _snap(tradeable=False))
+    state.update(42, subscribed=True)
+
+    tg = FakeTelegram()
+    import threading, time
+    stop = threading.Event()
+    t = threading.Thread(target=tb.push_loop, args=(tg, state, stop), daemon=True)
+    t.start()
+    time.sleep(0.2)
+    stop.set()
+    t.join(timeout=2)
+    results = [s for s in tg.sent if "WIN" in s[1] or "LOSS" in s[1]]
+    assert len(results) == 1, "a resolution must be announced only once"
+    assert state.get(42)["last_result"] == "2026-10-05T17:45:00+00:00"
 
 
 def test_split_chunks_long_messages():
@@ -159,7 +209,7 @@ def test_push_sends_once_per_candle(state, monkeypatch):
     stop.set()
     t.join(timeout=2)
 
-    pushes = [s for s in tg.sent if s[1].startswith("🔔")]
+    pushes = [s for s in tg.sent if "Signal:" in s[1]]
     assert len(pushes) == 1, "same candle must be pushed only once"
     assert state.get(42)["last_signal"] == "2026-10-05T17:45:00+00:00"
 
@@ -180,4 +230,4 @@ def test_push_skips_untradeable(state, monkeypatch):
     time.sleep(0.15)
     stop.set()
     t.join(timeout=2)
-    assert not [s for s in tg.sent if s[1].startswith("🔔")]
+    assert not [s for s in tg.sent if "Signal:" in s[1]]

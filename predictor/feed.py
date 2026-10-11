@@ -87,6 +87,9 @@ class BaseFeed:
         # history replay can't pollute the ledger (see _is_fresh).
         self.freshness_check = True
         self._results: deque[bool] = deque(maxlen=200)
+        # Most recent resolved signal, so the bot can tell the user how the
+        # previous call actually closed (WIN/LOSS).
+        self._last_result: dict | None = None
         self._since_retrain = 0
         self._walk_forward: dict | None = None
         # Raw out-of-sample arrays, kept so set_min_conf() can re-threshold
@@ -136,6 +139,7 @@ class BaseFeed:
             results = list(self._results)
             walk = self._walk_forward
             updated = self._updated
+            last_result = self._last_result
 
         out = {
             "pair": self.pair,
@@ -151,6 +155,7 @@ class BaseFeed:
             "walk_forward": walk,
             "payout": self.payout,
             "min_conf": self.min_conf,
+            "last_result": last_result,
             "session": {
                 "signals": len(results),
                 "wins": int(sum(results)),
@@ -261,6 +266,16 @@ class BaseFeed:
                         # bool()/float() strip numpy scalars, which Flask's
                         # jsonify cannot serialise (int64 -> 500 on /api/live).
                         self._results.append(win)
+                        self._last_result = {
+                            "direction": self._pending["dir"],
+                            "confidence": float(self._pending["conf"]),
+                            "entry_close": float(self._pending["ref_close"]),
+                            "exit_close": float(candle["close"]),
+                            "win": win,
+                            "resolved_at": datetime.fromtimestamp(
+                                candle["time"], tz=timezone.utc
+                            ).isoformat(),
+                        }
                         LEDGER.record(
                             pair=self.pair,
                             interval=self.interval,
