@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Quotex session helper</title>
+<style>
+  :root{--bg:#0b0f17;--panel:#121826;--line:#232c40;--text:#e6ebf5;--muted:#93a0b8;
+    --accent:#4f8cff;--ok:#22c55e;--radius:12px}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--text);
+    font:15px/1.55 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;padding:20px}
+  .wrap{max-width:680px;margin:0 auto}
+  h1{font-size:22px;margin:0 0 6px}
+  p.sub{color:var(--muted);margin:0 0 20px}
+  .step{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);
+    padding:16px;margin-bottom:14px}
+  .step h2{font-size:15px;margin:0 0 10px;color:var(--accent)}
+  ol{margin:0;padding-left:20px} li{margin:4px 0}
+  a.bm{display:inline-block;padding:10px 16px;background:var(--accent);color:#fff;
+    border-radius:9px;text-decoration:none;font-weight:600;margin:6px 0}
+  textarea{width:100%;min-height:90px;background:#0d1220;color:var(--text);
+    border:1px solid var(--line);border-radius:9px;padding:10px;font:13px/1.4 ui-monospace,monospace}
+  label{display:block;margin-top:12px;color:var(--muted);font-size:13px}
+  button{margin-top:14px;padding:12px 18px;border:0;border-radius:9px;background:var(--ok);
+    color:#04220f;font-weight:700;font-size:15px;width:100%}
+  pre{background:#0d1220;border:1px solid var(--line);border-radius:9px;padding:12px;
+    overflow:auto;font-size:12px;white-space:pre-wrap;word-break:break-all}
+  .note{color:var(--muted);font-size:12px;margin-top:8px}
+  .warn{background:#2a1a14;border:1px solid #5b3a22;color:#ffcf9e;border-radius:9px;
+    padding:12px;font-size:13px;margin-bottom:14px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Quotex session helper</h1>
+  <p class="sub">Build a <code>session.json</code> for the predictor bot — entirely on your phone.</p>
+
+  <div class="warn">
+    The token is like a password. Do not share it, paste it in chats, or commit it to Git.
+    Keep it only in your bot's secret environment.
+  </div>
+
+  <div class="step">
+    <h2>Step 1 — get the token (bookmarklet)</h2>
+    <ol>
+      <li>Open <b>Quotex</b> in Kiwi Browser and log in.</li>
+      <li>Save this as a bookmark (long-press, Add bookmark, paste the address):
+        <br><a class="bm" href="javascript:(async()=>{try{let t='',s=window.settings||{};try{const r=await fetch('/api/v1/cabinets/digest',{credentials:'include'});const d=await r.json();const x=d&&d.data?d.data:d;t=x.token||x.ssid||'';}catch(e){}if(!t)t=s.token||s.ssid||'';prompt('Copy token + user_agent:',JSON.stringify({token:t,user_agent:navigator.userAgent},null,1));}catch(e){alert('failed: '+e)}})()">Quotex token</a>
+      </li>
+      <li>On the Quotex tab, open that bookmark. A box shows your token and user agent — copy it.</li>
+    </ol>
+    <label>Paste the bookmarklet output here</label>
+    <textarea id="tok" placeholder='{"token":"...","user_agent":"Mozilla/5.0 ..."}'></textarea>
+  </div>
+
+  <div class="step">
+    <h2>Step 2 — get the cookies</h2>
+    <ol>
+      <li>In Kiwi Browser, install the <b>Cookie-Editor</b> extension.</li>
+      <li>On the Quotex tab, open Cookie-Editor, Export, JSON.</li>
+      <li>Paste the exported JSON below (it includes HttpOnly cookies like <code>cf_clearance</code>).</li>
+    </ol>
+    <label>Paste the Cookie-Editor JSON export here</label>
+    <textarea id="ck" placeholder='[{"name":"cf_clearance","value":"..."},{"name":"laravel_session","value":"..."}]'></textarea>
+  </div>
+
+  <div class="step">
+    <h2>Step 3 — build session.json</h2>
+    <button id="go">Build session.json</button>
+    <pre id="out">—</pre>
+    <p class="note">Save the output as <code>session.json</code>, then run:<br>
+      <code>QUOTEX_SESSION_FILE=session.json DATA_SOURCE=quotex python bot.py</code></p>
+  </div>
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+
+function cookieString(raw){
+  raw = raw.trim();
+  if(!raw) return "";
+  try{
+    const parsed = JSON.parse(raw);
+    const list = Array.isArray(parsed) ? parsed : (parsed.cookies || []);
+    if(Array.isArray(list) && list.length && list[0].name){
+      return list.map(c => c.name + '=' + c.value).join('; ');
+    }
+  }catch(e){ /* not JSON: treat as a raw cookie header */ }
+  return raw.replace(/\s+/g, ' ').trim();
+}
+
+$('go').addEventListener('click', () => {
+  const out = $('out');
+  const tokRaw = $('tok').value.trim();
+  if(!tokRaw){ out.textContent = 'Paste the bookmarklet output first.'; return; }
+
+  let token = tokRaw, userAgent = "";
+  try{
+    const o = JSON.parse(tokRaw);
+    token = o.token || o.ssid || "";
+    userAgent = o.user_agent || "";
+  }catch(e){ token = tokRaw; }
+
+  const cookies = cookieString($('ck').value);
+  if(!token){ out.textContent = 'No token found. Run the bookmarklet while logged in.'; return; }
+  if(!cookies){ out.textContent = 'No cookies found. Export them with Cookie-Editor first.'; return; }
+
+  const session = { token: token, cookies: cookies };
+  if(userAgent) session.user_agent = userAgent;
+  out.textContent = JSON.stringify(session, null, 2);
+});
+</script>
+</body>
+</html>
