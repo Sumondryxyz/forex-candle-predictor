@@ -65,6 +65,35 @@ signal (direction, confidence, tradeable flag, a sparkline of the last 60 candle
 and the next candle open time) plus a one-click walk-forward backtest. Nothing is
 ever traded.
 
+## Telegram bot
+
+The same feed and engine drive a Telegram bot, so signals arrive on your phone.
+
+```bash
+TELEGRAM_BOT_TOKEN=123:abc python bot.py
+```
+
+1. In Telegram, talk to **@BotFather** → `/newbot` → copy the token.
+2. Run the command above (locally, or as a Botkeep **worker**).
+3. Send `/start` to your bot.
+
+| Command | What it does |
+|---|---|
+| `/signal [PAIR] [INTERVAL]` | one prediction, e.g. `/signal EURUSD 5m` |
+| `/scan` | every configured pair at your interval |
+| `/session` | paper WIN/LOSS record for the current pair |
+| `/pairs` | available pairs and intervals |
+| `/setpair EURUSD`, `/setinterval 5m` | remember defaults |
+| `/subscribe` / `/unsubscribe` | auto-push tradeable signals |
+| `/status` | your current settings |
+
+The bot **never places a trade**. Auto-push sends at most one message per candle
+(`PUSH_INTERVAL` seconds between checks, default 30).
+
+> ⚠️ Quotex blocks logins from datacenter IPs. If you host the bot, keep
+> `DATA_SOURCE=tradingview` (no login needed) or run it from a home/mobile
+> connection.
+
 ### Data sources
 
 Pick the source from the dropdown (or `DATA_SOURCE=...`):
