@@ -7,3 +7,6 @@ data/
 session.json
 .quotex/
 var/
+
+# Local build artifact served from predictor/static for phone download
+predictor/static/*.zip
