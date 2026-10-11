@@ -112,19 +112,32 @@ disable battery optimisation for Termux.
 
 ### Quotex session without a PC
 
-Cloudflare blocks the Quotex *login page* from datacenter IPs, so the reliable
-way in is a session exported from a browser you are already logged into:
+Cloudflare blocks the Quotex *login page* from datacenter IPs, so the phone logs
+in and hands the session to the bot. The one-tap way:
 
-1. Open `tools/quotex-session-helper.html` on your phone (Kiwi Browser works).
-2. Run the bookmarklet on the logged-in Quotex tab to get `token` + `user_agent`.
-3. Export cookies with the **Cookie-Editor** extension and paste them in.
-4. Save the generated JSON as `session.json` and validate it:
+```bash
+python scripts/session_capture.py     # serves http://127.0.0.1:8787
+```
+
+Open that URL on the phone and follow the page:
+
+1. Install **Tampermonkey** in Kiwi Browser, open `/capture.user.js`, Install.
+2. Log in to Quotex. The script reads the token from `/api/v1/cabinets/digest`
+   and the cookies with Tampermonkey's `GM_cookie` API (needed for the HttpOnly
+   `laravel_session` / `cf_clearance`), then saves `session.json` automatically.
+   A “Session saved ✓” badge confirms it. No password is ever read.
+3. Run the bot: `QUOTEX_SESSION_FILE=session.json DATA_SOURCE=quotex python bot.py`.
+
+The server binds to `127.0.0.1` only, so nothing leaves the phone. Set
+`CAPTURE_KEY=...` on both the server and the userscript to require a shared key.
+
+Prefer no extension? `tools/quotex-session-helper.html` does the same by hand
+(bookmarklet + Cookie-Editor). Validate either file with:
 
 ```bash
 python scripts/check_quotex_session.py session.json
 ```
 
-Then run with `QUOTEX_SESSION_FILE=session.json DATA_SOURCE=quotex python bot.py`.
 The token is like a password: never commit it or share it.
 
 ### Data sources
