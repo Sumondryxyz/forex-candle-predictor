@@ -186,3 +186,13 @@ The high thresholds were the real lever: base35 pooled hit rises 57.1% (0.70)
   is unit-tested without a browser. The written layout matches what
   `predictor/quotex_session.load_session` already reads (flat or email-keyed).
 - Never commit `session.json`; it holds a bearer token. It is gitignored.
+
+## Getting work onto GitHub (the sandbox token is read-only)
+- The injected GITHUB_TOKEN is a `ghu_` GitHub App user token with read-only
+  access: `git push` returns 403 and the API returns "Resource not accessible by
+  integration", even though the repo object reports `push: true`. Do not rely on
+  it to push.
+- Distribution path for a phone-only user: export the branch as a `.patch`
+  (`git format-patch --stdout origin/main..HEAD`) and a `.bundle`
+  (`git bundle create x.bundle refs/heads/<branch> --not refs/remotes/origin/main`),
+  serve them, and let the user push with their own credentials.
