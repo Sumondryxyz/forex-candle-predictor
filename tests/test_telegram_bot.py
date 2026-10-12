@@ -231,3 +231,34 @@ def test_push_skips_untradeable(state, monkeypatch):
     stop.set()
     t.join(timeout=2)
     assert not [s for s in tg.sent if "Signal:" in s[1]]
+
+
+# ---------------------------------------------------------------- smart scan
+def _wf(rate, signals=50, roi=1.0):
+    return {"rate": rate, "signals": signals, "roi": roi, "coverage": 10.0}
+
+
+def test_format_smart_ranks_by_rate_with_medals():
+    snaps = [
+        _snap(pair="EURUSD", walk_forward=_wf(57.0)),
+        _snap(pair="GBPUSD", walk_forward=_wf(48.0)),
+        _snap(pair="USDJPY", walk_forward=_wf(60.0)),
+    ]
+    out = tb.format_smart(snaps)
+    assert "Smart scan" in out
+    assert "USDJPY" in out and "EURUSD" in out and "GBPUSD" in out
+    assert "Best right now:" in out and "USDJPY" in out.split("Best right now:")[1]
+    assert "🚫" in out and "✅" in out
+
+
+def test_format_smart_handles_still_training():
+    out = tb.format_smart([_snap(walk_forward={})])
+    assert "Still training" in out
+
+
+def test_smart_command_uses_stub_feed(state, monkeypatch):
+    monkeypatch.setattr(tb, "_safe_snapshot",
+                        lambda p, i: _snap(pair=p, interval=i, walk_forward=_wf(56.0)))
+    tg = FakeTelegram()
+    tb.handle(tg, state, _msg("/smart"))
+    assert tg.sent and "Smart scan" in tg.sent[0][1]

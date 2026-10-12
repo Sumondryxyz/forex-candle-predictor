@@ -187,6 +187,28 @@ The high thresholds were the real lever: base35 pooled hit rises 57.1% (0.70)
   `predictor/quotex_session.load_session` already reads (flat or email-keyed).
 - Never commit `session.json`; it holds a bearer token. It is gitignored.
 
+## Reading the signal (how it is meant to be used)
+- The honest edge is small (~55-58%). Do not advertise more. `format_signal`
+  and `/signal` print the confidence floor next to every call for this reason.
+- Trust a call only when `tradeable` is true (confidence >= `MIN_CONF`, 0.70).
+  Most of the time every pair is below the floor; that is the correct behaviour,
+  not a bug.
+- `/smart` (Telegram) ranks pairs by their honest walk-forward rate at the
+  current floor and names the best one. This is the intended "intelligence":
+  stop chasing pairs that are noise, follow the one with a measured edge.
+
+## Rejected ideas (measured, do not re-try blind)
+- **Extra context features on the linear backend** (volatility regime, band
+  width, efficiency ratio, longer-horizon returns, return autocorrelation):
+  A/B via `research_context_features.py` was 5 wins / 3 losses at floor 0.55 and
+  3/3 at 0.70 across 8 pair/intervals. Not a win — leave the feature set alone.
+- **Per-pair adaptive confidence floor** (pick the best floor on an early
+  out-of-sample slice, apply it to a later slice): `research_adaptive_floor.py`
+  was 6 wins / 10 losses / 1 tie vs the fixed 0.70 floor. The chosen floor does
+  not transfer; keep the fixed floor.
+- Lesson: on FX the honest edge is fragile. Always A/B with the harness on the
+  SAME data (and both halves of the walk-forward) before shipping "smarter".
+
 ## Getting work onto GitHub (the sandbox token is read-only)
 - The injected GITHUB_TOKEN is a `ghu_` GitHub App user token with read-only
   access: `git push` returns 403 and the API returns "Resource not accessible by

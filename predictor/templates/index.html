@@ -136,6 +136,7 @@
     </div>
     <button id="go">Connect live</button>
     <button id="bt" class="ghost">Run backtest</button>
+    <button id="sm" class="ghost">Smart scan</button>
     <button id="lg" class="ghost">Refresh ledger</button>
     <span id="status" class="pill">ready</span>
   </div>
@@ -153,6 +154,12 @@
       <div id="backtest-err" class="err"></div>
     </section>
   </div>
+
+  <section class="card ledger-card">
+    <h2>Smart scan <span class="note-inline">which pair / interval actually has an edge</span></h2>
+    <div id="smart-body"><p class="note">Press "Smart scan" to rank every pair by its honest out-of-sample win rate at your floor. The first run trains each pair (~30-60s each).</p></div>
+    <div id="smart-err" class="err"></div>
+  </section>
 
   <section class="card ledger-card">
     <h2>Paper-trading ledger <span class="note-inline">honest forward WIN/LOSS record (no real trades)</span></h2>
@@ -434,8 +441,44 @@ function renderLedger(d) {
     <tbody>${recentRows}</tbody></table>`;
 }
 
+async function loadSmart() {
+  $('smart-err').textContent = '';
+  const source = $('source').value;
+  const interval = $('interval').value;
+  const pairs = Array.from($('pair').options).map(o => o.value);
+  $('smart-body').innerHTML = `<p class="note">Scanning ${pairs.length} pairs on ${interval}...
+    first run trains each one (~30-60s each), please wait.</p>`;
+  const rows = [];
+  for (const p of pairs) {
+    try {
+      const d = await getJSON(`/api/signals?pair=${p}&interval=${interval}&source=${source}`);
+      const wf = d.walk_forward || {};
+      if (wf.rate != null && wf.signals) {
+        rows.push({ pair: p, rate: wf.rate, signals: wf.signals, roi: wf.roi });
+      }
+    } catch (e) { /* one pair failing must not sink the scan */ }
+  }
+  if (!rows.length) {
+    $('smart-body').innerHTML = `<p class="note">Still training. Press "Smart scan" again in ~30s.</p>`;
+    return;
+  }
+  rows.sort((a, b) => b.rate - a.rate);
+  const medal = ['🥇', '🥈', '🥉'];
+  const flag = (r) => r >= 55 ? '✅' : r >= 52 ? '⚠️' : '🚫';
+  const body = rows.map((r, i) => `<tr><td>${medal[i] || ''} ${flag(r.rate)} ${r.pair}</td>
+    <td>${r.signals}</td><td>${r.rate.toFixed(1)}%</td>
+    <td class="${r.roi >= 0 ? 'up-txt' : 'down-txt'}">${r.roi >= 0 ? '+' : ''}${r.roi}%</td></tr>`).join('');
+  const best = rows[0];
+  $('smart-body').innerHTML = `
+    <table><thead><tr><th>pair</th><th>calls</th><th>win rate</th><th>ROI</th></tr></thead>
+    <tbody>${body}</tbody></table>
+    <p class="note">Best right now: <b>${best.pair} ${interval}</b> at ${best.rate.toFixed(1)}%.
+    Honest out-of-sample rate at your floor — never a guarantee, no trades placed.</p>`;
+}
+
 $('go').addEventListener('click', loadSignal);
 $('bt').addEventListener('click', loadBacktest);
+$('sm').addEventListener('click', loadSmart);
 $('lg').addEventListener('click', loadLedger);
 loadSignal();
 loadLedger();

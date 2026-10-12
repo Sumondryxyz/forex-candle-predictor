@@ -192,6 +192,45 @@ def format_scan(snaps: list[dict]) -> str:
     return "\n".join(rows)
 
 
+def format_smart(snaps: list[dict]) -> str:
+    """Rank pairs by their HONEST walk-forward rate at the current floor.
+
+    This does not claim a pair is tradeable now — it shows where the edge has
+    actually lived, so the user can stop chasing the pairs that are pure noise.
+    """
+    scored = []
+    pending = []
+    for s in snaps:
+        pair, interval = s.get("pair"), s.get("interval")
+        if s.get("error"):
+            continue
+        wf = s.get("walk_forward") or {}
+        rate, signals = wf.get("rate"), wf.get("signals")
+        if rate is None or not signals:
+            pending.append(f"{pair}")
+            continue
+        roi = wf.get("roi")
+        scored.append((float(rate), int(signals), pair, interval, roi))
+
+    rows = ["🧠 <b>Smart scan</b> — where the edge actually is"]
+    if not scored:
+        return "\n".join(rows + ["⏳ Still training. Try again in ~30s."])
+    scored.sort(reverse=True)
+    best = scored[0]
+    for i, (rate, signals, pair, interval, roi) in enumerate(scored):
+        medal = "🥇" if i == 0 else "🥈" if i == 1 else "🥉" if i == 2 else "  "
+        flag = "✅" if rate >= 55 else "⚠️" if rate >= 52 else "🚫"
+        roi_txt = f" · ROI {roi:+.1f}%" if roi is not None else ""
+        rows.append(f"{medal} {flag} {pair} {interval}: <b>{rate:.1f}%</b> "
+                    f"({signals} calls){roi_txt}")
+    rows.append(f"👉 Best right now: <b>{best[2]} {best[3]}</b> at {best[0]:.1f}%")
+    if pending:
+        rows.append(f"⏳ training: {', '.join(pending)}")
+    rows.append("<i>Honest out-of-sample rate. Never a guarantee; no trades placed.</i>")
+    return "\n".join(rows)
+
+
+
 HELP = (
     "<b>Next-candle predictor</b>\n"
     "Predicts the next candle's direction with a confidence. "
@@ -200,6 +239,7 @@ HELP = (
     "/signal [PAIR] [INTERVAL] — one pair, e.g. <code>/signal EURUSD 5m</code>\n"
     "/result [PAIR] [INTERVAL] — how the previous call closed (WIN/LOSS)\n"
     "/scan — every configured pair at your interval\n"
+    "/smart — rank pairs by their honest out-of-sample win rate\n"
     "/session — paper WIN/LOSS record\n"
     "/pairs — available pairs and intervals\n"
     "/setpair EURUSD — remember a default pair\n"
@@ -302,6 +342,11 @@ def handle(tg: Telegram, state: State, msg: dict) -> None:
     if cmd == "/scan":
         snaps = [_safe_snapshot(p, interval) for p in _pairs()]
         tg.send(chat_id, format_scan(snaps))
+        return
+
+    if cmd == "/smart":
+        snaps = [_safe_snapshot(p, interval) for p in _pairs()]
+        tg.send(chat_id, format_smart(snaps))
         return
 
     tg.send(chat_id, "Unknown command. Send /help.")
