@@ -1,7 +1,7 @@
 """Render free-plan launcher for the Telegram bot.
 
 Opens the HTTP port FIRST (so Render's port scan passes), then imports the
-heavy bot code and runs it.
+heavy bot code, fixes the token URL bug, and runs it.
 """
 import os
 import threading
@@ -33,8 +33,13 @@ if __name__ == "__main__":
     threading.Thread(target=serve, daemon=True).start()
     print("health server started", flush=True)
     try:
-        from predictor.telegram_bot import main
-        main()
+        from predictor import telegram_bot as tb
+
+        def _init(self, token):
+            self.base = tb.API.replace("{token}", token)
+
+        tb.Telegram.__init__ = _init
+        tb.main()
     except BaseException:
         traceback.print_exc()
         raise
