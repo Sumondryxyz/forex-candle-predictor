@@ -20,6 +20,10 @@ from pathlib import Path
 from typing import Any
 
 DEFAULT_HOST = os.getenv("QUOTEX_HOST", "market-qx.trade")
+# Matches pyquotex's default UA closely enough for the Cloudflare handshake; the
+# optional pyquotex import below is used only when it is actually installed.
+_FALLBACK_UA = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+                "(KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36")
 _TOKEN_RE = re.compile(r'"?token"?\s*[:=]\s*"([A-Za-z0-9]{32,})"')
 _applied = False
 
@@ -46,9 +50,12 @@ def load_session(path: str, email: str | None = None) -> dict[str, Any]:
             f"session file {path!r} has no 'token'; export cookies, token and user_agent"
         )
     if not data.get("user_agent"):
-        from pyquotex.config import USER_AGENT
-
-        data = {**data, "user_agent": USER_AGENT}
+        ua = _FALLBACK_UA
+        try:  # prefer pyquotex's own UA when the optional dependency is present
+            from pyquotex.config import USER_AGENT as ua
+        except ImportError:
+            pass
+        data = {**data, "user_agent": ua}
     return data
 
 
