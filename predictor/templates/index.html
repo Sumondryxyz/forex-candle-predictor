@@ -143,6 +143,7 @@
     <button id="sm" class="ghost">Smart scan</button>
     <button id="sx" class="ghost">Smart money</button>
     <button id="rk" class="ghost">Risk &amp; stake</button>
+    <button id="rd" class="ghost">Go-live readiness</button>
     <button id="lg" class="ghost">Refresh ledger</button>
     <span id="status" class="pill">ready</span>
   </div>
@@ -165,6 +166,12 @@
     <h2>Smart money analysis <span class="note-inline">market structure — analysis only, not a signal</span></h2>
     <div id="smc-body"><p class="note">Press "Smart money" for an order-block / liquidity / premium-discount read of this pair. It explains the structure behind the signal; it does not predict direction on its own.</p></div>
     <div id="smc-err" class="err"></div>
+  </section>
+
+  <section class="card ledger-card">
+    <h2>Go-live readiness gate <span class="note-inline">real-money checklist — no trade placed</span></h2>
+    <div id="rd-body"><p class="note">Press "Go-live readiness" to check whether the forward-tested edge is statistically real: win rate vs break-even, its 95% lower bound, and a binomial p-value from your paper ledger. Real money is only justified on a 🟢 GO.</p></div>
+    <div id="rd-err" class="err"></div>
   </section>
 
   <section class="card ledger-card">
@@ -563,11 +570,45 @@ async function loadSmc() {
   }
 }
 
+async function loadReadiness() {
+  $('rd-err').textContent = '';
+  $('rd-body').innerHTML = '<p class="note">Checking the forward record...</p>';
+  try {
+    const d = await getJSON('/api/readiness');
+    const a = d.overall;
+    const icon = { go: '🟢', 'forward-only': '🟡', 'no-go': '🔴' }[a.verdict] || '';
+    const rows = d.by_combo.length ? d.by_combo.map(c => {
+      const ci = { go: '🟢', 'forward-only': '🟡', 'no-go': '🔴' }[c.verdict] || '';
+      const rate = c.rate === null ? '—' : (c.rate * 100).toFixed(1) + '%';
+      return `<div><div class="k">${ci} ${c.combo}</div>${rate} over ${c.forward_trades} trades`
+        + (c.walk_forward_rate ? ` · wf ${c.walk_forward_rate}%` : '') + `</div>`;
+    }).join('') : '<div class="note">No resolved forward trades yet — flip decisions on paper (or with tiny size) long enough to build a record.</div>';
+    $('rd-body').innerHTML = `
+      <div class="signal"><div class="badge">${icon}</div>
+        <div><div class="k">verdict</div>
+        <div style="font-size:20px;font-weight:700">${a.verdict.toUpperCase()}</div>
+        <div class="note">${a.forward_wins}/${a.forward_trades} forward · break-even ${(a.break_even * 100).toFixed(1)}%</div></div></div>
+      <div class="meta">
+        <div><div class="k">win rate</div>${a.rate === null ? '—' : (a.rate * 100).toFixed(1) + '%'}</div>
+        <div><div class="k">95% lower bound</div>${a.wilson_lower === null ? '—' : (a.wilson_lower * 100).toFixed(1) + '%'}</div>
+        <div><div class="k">p-value</div>${a.p_value === null ? '—' : a.p_value}</div>
+        <div><div class="k">min trades for a verdict</div>${a.min_trades}</div>
+      </div>
+      <p class="note"><b>Why:</b> ${a.reason}</p>
+      <div class="meta">${rows}</div>
+      <p class="note">${d.note}</p>`;
+  } catch (e) {
+    $('rd-body').innerHTML = '<p class="note">Could not load readiness.</p>';
+    $('rd-err').textContent = e.message;
+  }
+}
+
 $('go').addEventListener('click', loadSignal);
 $('bt').addEventListener('click', loadBacktest);
 $('sm').addEventListener('click', loadSmart);
 $('sx').addEventListener('click', loadSmc);
 $('rk').addEventListener('click', loadRisk);
+$('rd').addEventListener('click', loadReadiness);
 $('lg').addEventListener('click', loadLedger);
 loadSignal();
 loadLedger();

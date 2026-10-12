@@ -21,6 +21,7 @@ from pathlib import Path
 import requests
 
 from . import risk
+from .feed import LEDGER
 from .webapp import DEFAULT_SOURCE, InputError, _intervals, _pairs, get_feed
 
 log = logging.getLogger("telegram_bot")
@@ -249,6 +250,32 @@ def format_smc(pair: str, interval: str) -> str:
     return "\n".join(rows)
 
 
+def format_readiness(ledger_summary: dict, payout: float) -> str:
+    """The go-live gate, rendered for Telegram. Never places a trade."""
+    from . import readiness
+
+    a = readiness.assess(
+        forward_wins=ledger_summary.get("wins", 0),
+        forward_trades=ledger_summary.get("trades", 0),
+        payout=payout,
+    )
+    icon = {"go": "🟢", "forward-only": "🟡", "no-go": "🔴"}[a["verdict"]]
+    lines = [
+        "🚦 <b>Go-live readiness gate</b>",
+        f"{icon} Verdict: <b>{a['verdict'].upper()}</b>",
+        f"Forward record: {a['forward_wins']}/{a['forward_trades']} "
+        + (f"({a['rate']:.1%})" if a.get("rate") is not None else "(no trades yet)"),
+        f"Break-even win rate: <b>{a['break_even']:.1%}</b> at payout {payout:.0%}",
+    ]
+    if a.get("wilson_lower") is not None:
+        lines.append(f"95% lower bound: {a['wilson_lower']:.1%} · "
+                     f"p-value: {a['p_value']}")
+    lines.append(f"<i>{html.escape(a['reason'])}</i>")
+    lines.append("Forward-test first. The gate blocks real money until the edge "
+                 "is statistically real.")
+    return "\n".join(lines)
+
+
 def format_scan(snaps: list[dict]) -> str:
     rows = ["<b>Scan</b>"]
     for s in snaps:
@@ -316,6 +343,7 @@ HELP = (
     "/smart — rank pairs by their honest out-of-sample win rate\n"
     "/risk [PAIR] [INTERVAL] [BANKROLL] — stake size vs the measured edge\n"
     "/smc [PAIR] [INTERVAL] — market-structure read (order blocks, liquidity)\n"
+    "/readiness — go/no-go gate: is the edge statistically real?\n"
     "/session — paper WIN/LOSS record\n"
     "/pairs — available pairs and intervals\n"
     "/setpair EURUSD — remember a default pair\n"
@@ -397,6 +425,11 @@ def handle(tg: Telegram, state: State, msg: dict) -> None:
                          f"Interval: {html.escape(str(s.get('interval') or _intervals()[0]))}\n"
                          f"Auto-push: {'on' if s.get('subscribed') else 'off'}\n"
                          f"Chat id: <code>{chat_id}</code>")
+        return
+
+    if cmd == "/readiness":
+        payout = float((_safe_snapshot(pair, interval).get("payout")) or 0.80)
+        tg.send(chat_id, format_readiness(LEDGER.summary(recent=0), payout))
         return
 
     if cmd == "/session":

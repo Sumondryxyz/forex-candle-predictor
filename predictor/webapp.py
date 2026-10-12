@@ -284,6 +284,52 @@ def create_app() -> Flask:
             "recommendation": smc.recommendation(analysis),
         })
 
+    @app.get("/api/readiness")
+    def readiness_view():
+        """Go-live gate: is the forward-tested edge statistically real?
+
+        Combines the honest paper ledger with the walk-forward rate and returns a
+        go / forward-only / no-go verdict. Never places a trade; this is the
+        checklist that decides whether real money is justified.
+        """
+        try:
+            bankroll = float(request.args.get("bankroll", 1000))
+        except (TypeError, ValueError):
+            return jsonify({"error": "bankroll must be a number"}), 400
+        from . import readiness
+
+        payout = float(os.getenv("PAYOUT", "0.80"))
+        summary = LEDGER.summary(recent=0)
+        overall = readiness.assess(
+            forward_wins=summary.get("wins", 0),
+            forward_trades=summary.get("trades", 0),
+            payout=payout,
+        )
+        combos = []
+        for row in summary.get("by_combo", []):
+            wf = None
+            try:
+                feed = get_feed(*row["combo"].split())
+                wf = (feed.snapshot().get("walk_forward") or {}).get("rate")
+            except (InputError, ValueError):
+                wf = None
+            combos.append({
+                "combo": row["combo"],
+                **readiness.assess(
+                    forward_wins=row.get("wins", 0),
+                    forward_trades=row.get("trades", 0),
+                    payout=payout,
+                    walk_forward_rate=wf,
+                ),
+            })
+        return jsonify({
+            "payout": payout,
+            "bankroll": bankroll,
+            "overall": overall,
+            "by_combo": combos,
+            "note": "Readiness gate only. No trade is placed; this is not advice.",
+        })
+
     return app
 
 

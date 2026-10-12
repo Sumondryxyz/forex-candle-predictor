@@ -328,3 +328,30 @@ def test_smc_command_routes(state, monkeypatch):
     tg = FakeTelegram()
     tb.handle(tg, state, _msg("/smc GBPUSD 15m"))
     assert tg.sent and tg.sent[0][1] == "SMC GBPUSD 15m"
+
+
+# ---------------------------------------------------------------- readiness
+def test_format_readiness_no_trades(monkeypatch):
+    out = tb.format_readiness({"trades": 0, "wins": 0}, 0.80)
+    assert "READINESS" in out.upper()
+    assert "FORWARD-ONLY" in out.upper()
+    assert "no trades yet" in out
+
+
+def test_format_readiness_go_on_strong_record():
+    out = tb.format_readiness({"trades": 500, "wins": 300}, 0.80)
+    assert "GO" in out
+    assert "55.6%" in out  # break-even at 0.80 payout
+
+
+class _StubLedger:
+    def summary(self, recent=0):
+        return {"trades": 0, "wins": 0}
+
+
+def test_readiness_command_routes(state, monkeypatch):
+    monkeypatch.setattr(tb, "LEDGER", _StubLedger())
+    monkeypatch.setattr(tb, "_safe_snapshot", lambda p, i: _snap())
+    tg = FakeTelegram()
+    tb.handle(tg, state, _msg("/readiness"))
+    assert tg.sent and "readiness" in tg.sent[0][1].lower()

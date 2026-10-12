@@ -204,6 +204,28 @@ The high thresholds were the real lever: base35 pooled hit rises 57.1% (0.70)
   only act when `verdict == positive-edge`; never chase a losing combo; the FX
   edge (~55-58%) is thin, so treat any single result as noise.
 
+## Go-live readiness gate (`predictor/readiness.py`) — the real-money checklist
+`risk.py` sizes a single trade; this gate asks the harder question: is the edge
+statistically real, or a hot streak? A 58% rate on 20 trades is noise; the same
+on 500 trades can be a real edge. The gate makes that call:
+
+- Compares the forward (paper) win rate against break-even `1/(1+payout)`.
+- Wilson 95% lower bound: the pessimistic end of the interval must itself clear
+  break-even — the point estimate alone is not enough.
+- One-sided binomial p-value (pure-Python tail sum via `math.comb`, so no scipy
+  is needed on the deploy box; verified identical to scipy to ~1e-16): how
+  likely this run is if the true rate were exactly break-even.
+- Sample floor `MIN_TRADES = 100`: below it the verdict is NEVER `go`, however
+  good the rate looks.
+- Verdicts: `go` (real, survivable edge), `forward-only` (keep testing),
+  `no-go` (measurably below break-even — loses money over time).
+- Surfaces: `/readiness` (Telegram), `/api/readiness` (web, per-combo too), and
+  the "Go-live readiness gate" card. Verified live: 51 forward trades at 94%
+  still returns `forward-only` because it is under the sample floor — correct.
+- Before any real money: (1) `no-go` combos are off the table; (2) only `go`
+  combos are eligible; (3) size each with `risk.suggest_stake` at <=2% bankroll;
+  (4) re-check weekly — an edge can decay.
+
 ## Reading the signal (how it is meant to be used)
 - The honest edge is small (~55-58%). Do not advertise more. `format_signal`
   and `/signal` print the confidence floor next to every call for this reason.
