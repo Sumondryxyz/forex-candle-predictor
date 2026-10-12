@@ -1,14 +1,12 @@
 """Render free-plan launcher for the Telegram bot.
 
-Render web services must listen on $PORT, but the bot only polls Telegram.
-This starts a tiny HTTP server (for Render's health check and the keep-awake
-ping) in a thread, then runs the bot in the main thread.
+Opens the HTTP port FIRST (so Render's port scan passes), then imports the
+heavy bot code and runs it.
 """
 import os
 import threading
+import traceback
 from http.server import BaseHTTPRequestHandler, HTTPServer
-
-from predictor.telegram_bot import main
 
 
 class Health(BaseHTTPRequestHandler):
@@ -33,4 +31,10 @@ def serve():
 
 if __name__ == "__main__":
     threading.Thread(target=serve, daemon=True).start()
-    main()
+    print("health server started", flush=True)
+    try:
+        from predictor.telegram_bot import main
+        main()
+    except BaseException:
+        traceback.print_exc()
+        raise
