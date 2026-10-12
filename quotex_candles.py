@@ -9,7 +9,7 @@ session.
 import asyncio
 import os
 import time
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from pyquotex.stable_api import Quotex
 
@@ -23,7 +23,7 @@ PERIOD = int(os.getenv("PERIOD", "60"))
 
 
 def show(c):
-    t = datetime.fromtimestamp(c["time"], tz=timezone.utc).strftime("%H:%M:%S")
+    t = datetime.fromtimestamp(c["time"], tz=UTC).strftime("%H:%M:%S")
     d = "UP" if c["close"] >= c["open"] else "DOWN"
     print(
         f'{t}  O {c["open"]:.5f}  H {c["high"]:.5f}  '

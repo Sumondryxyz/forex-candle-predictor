@@ -1,19 +1,18 @@
-"""Optional Quotex candle source (unofficial, use at your own risk).
+"""Quotex candle source (unofficial, use at your own risk).
 
 Quotex publishes no API. This module talks to the broker through the community
 ``pyquotex`` client, which reverse-engineers the site's WebSocket. Using it
-breaks Quotex's terms of service and can get an account banned, so it is
-opt-in: set ``DATA_SOURCE=quotex``.
+breaks Quotex's terms of service and can get an account banned.
 
 Cloudflare blocks logins from datacenter IPs, so this only works when the bot
-runs from a residential connection. If a browser session is already logged in,
-export its cookies to ``QUOTEX_SESSION_FILE`` (JSON with ``cookies``, ``token``
-and ``user_agent``) and no password is needed.
+runs from a residential connection (or through a residential proxy set via
+``QUOTEX_PROXY``). If a browser session is already logged in, export its cookies
+to ``QUOTEX_SESSION_FILE`` (JSON with ``cookies``, ``token`` and ``user_agent``)
+and no password is needed.
 """
 from __future__ import annotations
 
 import asyncio
-import json
 import os
 import time
 from pathlib import Path
@@ -39,16 +38,18 @@ def _client():
         ) from exc
 
     quotex_session.apply(HOST)
+    proxy = os.getenv("QUOTEX_PROXY", "").strip()
     client = Quotex(
         email=os.getenv("QUOTEX_EMAIL", ""),
         password=os.getenv("QUOTEX_PASSWORD", ""),
         lang="en",
         host=HOST,
         root_path=ROOT_PATH,
+        proxies={"http": proxy, "https": proxy} if proxy else None,
     )
     client.set_account_mode(os.getenv("QUOTEX_ACCOUNT", "PRACTICE"))
     if SESSION_FILE:
-        session = json.loads(Path(SESSION_FILE).read_text())
+        session = quotex_session.load_session(SESSION_FILE, os.getenv("QUOTEX_EMAIL"))
         client.set_session(
             user_agent=session["user_agent"],
             cookies=session.get("cookies"),
@@ -66,14 +67,14 @@ async def _download(pair: str, interval: str, candles: int) -> list[dict]:
         period = interval_seconds(interval)
         rows = await client.get_candles(pair.upper(), time.time(), candles * period, period)
     finally:
-        client.close()
+        await client.close()
     if not rows:
         raise RuntimeError(f"Quotex returned no candles for {pair} {interval}")
     return rows
 
 
 def fetch_ohlc(pair: str, interval: str = "1m", days: int | None = None) -> pd.DataFrame:
-    """Same contract as ``predictor.data.fetch_ohlc``, backed by Quotex."""
+    """Return OHLC candles indexed by UTC timestamp, same shape the engine expects."""
     period = interval_seconds(interval)
     candles = int((days or 7) * 86400 / period)
     rows = asyncio.run(_download(pair, interval, candles))

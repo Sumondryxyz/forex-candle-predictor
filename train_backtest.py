@@ -25,7 +25,7 @@ def main() -> None:
         help="comma separated pairs pooled into training, e.g. GBPUSD,AUDUSD",
     )
     ap.add_argument("--no-calibration", action="store_true")
-    ap.add_argument("--source", default=None, help="yfinance (default) or quotex")
+    ap.add_argument("--source", default=None, help="candle source: tradingview (default) or quotex")
     args = ap.parse_args()
 
     fetch_ohlc = get_fetcher(args.source)

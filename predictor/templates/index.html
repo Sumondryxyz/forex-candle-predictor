@@ -1,0 +1,617 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Forex Candle Predictor</title>
+<style>
+  :root {
+    --bg: #0b0f17;
+    --panel: #141b27;
+    --panel-2: #1b2433;
+    --line: #263145;
+    --text: #e6edf7;
+    --muted: #8b9bb4;
+    --up: #22c55e;
+    --down: #ef4444;
+    --accent: #38bdf8;
+    --warn: #f59e0b;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: radial-gradient(1200px 600px at 50% -200px, #17233a 0%, var(--bg) 60%);
+    color: var(--text);
+    font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    min-height: 100vh;
+  }
+  .wrap { max-width: 1040px; margin: 0 auto; padding: 28px 20px 60px; }
+  header { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; margin-bottom: 4px; }
+  h1 { font-size: 22px; margin: 0; letter-spacing: -0.01em; }
+  .sub { color: var(--muted); font-size: 13px; }
+  .controls {
+    display: flex; gap: 12px; align-items: end; flex-wrap: wrap;
+    margin: 20px 0; padding: 16px; background: var(--panel);
+    border: 1px solid var(--line); border-radius: 14px;
+  }
+  label { display: block; font-size: 12px; color: var(--muted); margin-bottom: 6px; }
+  select, button {
+    font: inherit; color: var(--text); background: var(--panel-2);
+    border: 1px solid var(--line); border-radius: 9px; padding: 9px 12px;
+  }
+  button {
+    cursor: pointer; background: var(--accent); color: #04222f;
+    border-color: transparent; font-weight: 600;
+  }
+  button:disabled { opacity: .55; cursor: progress; }
+  button.ghost { background: transparent; color: var(--text); border-color: var(--line); font-weight: 500; }
+  .grid { display: grid; grid-template-columns: 1.1fr 1fr; gap: 16px; }
+  @media (max-width: 760px) { .grid { grid-template-columns: 1fr; } }
+  .card {
+    background: var(--panel); border: 1px solid var(--line);
+    border-radius: 14px; padding: 18px;
+  }
+  .card h2 { margin: 0 0 14px; font-size: 13px; text-transform: uppercase;
+    letter-spacing: .08em; color: var(--muted); font-weight: 600; }
+  .signal { display: flex; align-items: center; gap: 16px; }
+  .badge {
+    font-size: 30px; font-weight: 800; padding: 12px 20px; border-radius: 12px;
+    letter-spacing: -0.02em;
+  }
+  .badge.UP { color: var(--up); background: rgba(34,197,94,.12); border: 1px solid rgba(34,197,94,.35); }
+  .badge.DOWN { color: var(--down); background: rgba(239,68,68,.12); border: 1px solid rgba(239,68,68,.35); }
+  .meta { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 18px; margin-top: 16px; }
+  .meta div { font-size: 13px; }
+  .meta .k { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .05em; }
+  .conf-bar { height: 8px; border-radius: 6px; background: var(--panel-2); overflow: hidden; margin-top: 8px; }
+  .conf-bar > span { display: block; height: 100%; background: linear-gradient(90deg, var(--accent), var(--up)); }
+  .note { color: var(--muted); font-size: 12px; line-height: 1.6; margin-top: 14px; }
+  .candle-call { margin-top: 16px; padding: 12px 14px; border: 1px solid var(--line);
+    border-radius: 10px; background: rgba(255,255,255,.02); }
+  .candle-call .cc-head { font-size: 14px; font-weight: 600; margin-bottom: 10px; }
+  .candle-call .cc-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px 18px; }
+  .candle-call .cc-grid div { font-size: 13px; }
+  .candle-call .k { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .05em; }
+  .candle-call .note { margin-top: 10px; }
+  .warn { color: var(--warn); }
+  .sweep { width: 100%; border-collapse: collapse; margin-top: 16px; font-size: 13px; }
+  .sweep th, .sweep td { padding: 6px 10px; text-align: right; border-bottom: 1px solid var(--border); }
+  .sweep th:first-child, .sweep td:first-child { text-align: left; }
+  .sweep th { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .05em; }
+  .err { color: var(--down); font-size: 13px; margin-top: 10px; }
+  .spark { display: flex; align-items: flex-end; gap: 2px; height: 46px; margin-top: 14px; }
+  .spark i { flex: 1; background: var(--line); border-radius: 2px 2px 0 0; min-height: 3px; }
+  .spark i.up { background: var(--up); }
+  .spark i.down { background: var(--down); }
+  .pill { font-size: 11px; padding: 3px 9px; border-radius: 999px; border: 1px solid var(--line); color: var(--muted); }
+  .pill.open { color: var(--up); border-color: rgba(34,197,94,.4); }
+  .pill.closed { color: var(--warn); border-color: rgba(245,158,11,.4); }
+  .ledger-card { margin-top: 16px; }
+  .note-inline { text-transform: none; letter-spacing: 0; font-size: 11px; font-weight: 400; color: var(--muted); }
+  .stats { display: flex; gap: 28px; margin-bottom: 6px; }
+  .stats > div { font-size: 22px; font-weight: 700; }
+  .stats .k { font-size: 11px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); font-weight: 500; }
+  .sub-h { margin: 18px 0 6px; font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
+  .up { color: var(--up); }
+  .down { color: var(--down); }
+  footer { margin-top: 26px; color: var(--muted); font-size: 12px; text-align: center; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>Forex Candle Predictor</h1>
+    <span class="sub">live TradingView / Quotex feed &middot; next-candle UP/DOWN signal &middot; never places trades</span>
+  </header>
+
+  <div class="controls">
+    <div>
+      <label for="source">Source</label>
+      <select id="source">
+        {% for s in sources %}<option value="{{ s }}"{% if s == default_source %} selected{% endif %}>{{ s }}</option>{% endfor %}
+      </select>
+    </div>
+    <div>
+      <label for="pair">Pair</label>
+      <select id="pair">
+        {% for p in pairs %}<option value="{{ p }}">{{ p }}</option>{% endfor %}
+      </select>
+    </div>
+    <div>
+      <label for="interval">Interval</label>
+      <select id="interval">
+        {% for i in intervals %}<option value="{{ i }}"{% if i == '5m' %} selected{% endif %}>{{ i }}</option>{% endfor %}
+      </select>
+    </div>
+    <div>
+      <label for="floor">Min confidence</label>
+      <select id="floor" title="Higher = fewer, more accurate signals">
+        <option value="0.65">0.65</option>
+        <option value="0.70" selected>0.70</option>
+        <option value="0.75">0.75</option>
+        <option value="0.80">0.80</option>
+        <option value="0.85">0.85</option>
+        <option value="0.90">0.90</option>
+      </select>
+    </div>
+    <div>
+      <label for="bankroll">Bankroll ($)</label>
+      <input id="bankroll" type="number" min="1" step="10" value="1000" style="width:90px">
+    </div>
+    <button id="go">Connect live</button>
+    <button id="bt" class="ghost">Run backtest</button>
+    <button id="sm" class="ghost">Smart scan</button>
+    <button id="sx" class="ghost">Smart money</button>
+    <button id="rk" class="ghost">Risk &amp; stake</button>
+    <button id="rd" class="ghost">Go-live readiness</button>
+    <button id="lg" class="ghost">Refresh ledger</button>
+    <span id="status" class="pill">ready</span>
+  </div>
+
+  <div class="grid">
+    <section class="card">
+      <h2>Latest signal</h2>
+      <div id="signal-body"><p class="note">Pick a pair and press "Connect live".</p></div>
+      <div id="signal-err" class="err"></div>
+    </section>
+
+    <section class="card">
+      <h2>Walk-forward backtest</h2>
+      <div id="backtest-body"><p class="note">Press "Run backtest" for out-of-sample accuracy.</p></div>
+      <div id="backtest-err" class="err"></div>
+    </section>
+  </div>
+
+  <section class="card ledger-card">
+    <h2>Smart money analysis <span class="note-inline">market structure — analysis only, not a signal</span></h2>
+    <div id="smc-body"><p class="note">Press "Smart money" for an order-block / liquidity / premium-discount read of this pair. It explains the structure behind the signal; it does not predict direction on its own.</p></div>
+    <div id="smc-err" class="err"></div>
+  </section>
+
+  <section class="card ledger-card">
+    <h2>Go-live readiness gate <span class="note-inline">real-money checklist — no trade placed</span></h2>
+    <div id="rd-body"><p class="note">Press "Go-live readiness" to check whether the forward-tested edge is statistically real: win rate vs break-even, its 95% lower bound, and a binomial p-value from your paper ledger. Real money is only justified on a 🟢 GO.</p></div>
+    <div id="rd-err" class="err"></div>
+  </section>
+
+  <section class="card ledger-card">
+    <h2>Risk &amp; stake <span class="note-inline">real-money sizing — no trade placed</span></h2>
+    <div id="risk-body"><p class="note">Press "Risk &amp; stake" to size this signal against its honest measured edge. If the walk-forward rate is below break-even, the suggested stake is $0 — that is the point.</p></div>
+    <div id="risk-err" class="err"></div>
+  </section>
+
+  <section class="card ledger-card">
+    <h2>Smart scan <span class="note-inline">which pair / interval actually has an edge</span></h2>
+    <div id="smart-body"><p class="note">Press "Smart scan" to rank every pair by its honest out-of-sample win rate at your floor. The first run trains each pair (~30-60s each).</p></div>
+    <div id="smart-err" class="err"></div>
+  </section>
+
+  <section class="card ledger-card">
+    <h2>Paper-trading ledger <span class="note-inline">honest forward WIN/LOSS record (no real trades)</span></h2>
+    <div id="ledger-body"><p class="note">Signals that clear the confidence filter are logged and scored against the next candle.</p></div>
+    <div id="ledger-err" class="err"></div>
+  </section>
+
+  <footer>
+    Predictions are probabilistic and often below break-even. Demo-trade first. Not financial advice.
+  </footer>
+</div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const pct = (x) => (x * 100).toFixed(1) + '%';
+
+function setStatus(text) { $('status').textContent = text; }
+
+async function getJSON(url) {
+  const res = await fetch(url);
+  const data = await res.json().catch(() => ({ error: 'invalid JSON response' }));
+  if (!res.ok) throw new Error(data.error || ('HTTP ' + res.status));
+  return data;
+}
+
+// HH:MM:SS in local time, from an ISO instant.
+const clock = (iso) => iso ? new Date(iso).toLocaleTimeString([], { hour12: false }) : '-';
+// Whole seconds until an instant (never negative).
+const until = (iso) => Math.max(0, Math.round((new Date(iso).getTime() - Date.now()) / 1000));
+const mmss = (s) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+
+const statusPill = (s) => ({
+  live: '<span class="pill open">live</span>',
+  loading: '<span class="pill">loading history...</span>',
+  connecting: '<span class="pill">connecting...</span>',
+  idle: '<span class="pill">starting...</span>',
+  error: '<span class="pill closed">error</span>',
+}[s] || `<span class="pill">${s}</span>`);
+
+function renderLive(d) {
+  const pill = statusPill(d.status);
+  ccTarget = d.signal_candle_close || null;
+
+  if (d.error) {
+    $('signal-body').innerHTML = `
+      <div class="signal">${pill}</div>
+      <p class="note">Feed error: <span class="err">${d.error}</span></p>
+      <p class="note">If this is the <b>quotex</b> source: Cloudflare blocks the Quotex
+      <b>login page</b> from datacenter IPs. Switch Source to <b>tradingview</b> (no login
+      needed, reads the same pairs), or run from a home/mobile connection with
+      <code>QUOTEX_EMAIL</code>/<code>QUOTEX_PASSWORD</code>, export a session to
+      <code>QUOTEX_SESSION_FILE</code>, or set <code>QUOTEX_PROXY</code>. It retries
+      automatically.</p>`;
+    return;
+  }
+  if (!d.direction) {
+    $('signal-body').innerHTML = `<div class="signal">${pill}</div>
+      <p class="note">Downloading ${d.source} history and training the model for
+      ${d.pair} ${d.interval}...</p>
+      <p class="note">First time you pick a pair/interval this takes about
+      <b>30-60s</b> (roughly 5100 candles + a walk-forward check). The page
+      retries every 10s, so just wait a moment — no need to reload.</p>`;
+    return;
+  }
+
+  const bars = d.recent.map(c => {
+    const up = c.close >= c.open;
+    return `<i class="${up ? 'up' : 'down'}" title="${c.time} O ${c.open} C ${c.close}"></i>`;
+  }).join('');
+  const open = d.market_open ? '<span class="pill open">market open</span>'
+                             : '<span class="pill closed">market closed</span>';
+  const sess = d.session && d.session.signals
+    ? `${d.session.wins}/${d.session.signals} = ${d.session.rate}%`
+    : 'no signals yet';
+  const wf = d.walk_forward
+    ? `${d.walk_forward.rate.toFixed(1)}% on ${d.walk_forward.signals} signals`
+    : 'n/a';
+  $('signal-body').innerHTML = `
+    <div class="signal">
+      <div class="badge ${d.direction}">${d.direction}</div>
+      <div>
+        <div class="k">confidence</div>
+        <div style="font-size:20px;font-weight:700">${pct(d.confidence)}</div>
+        <div class="conf-bar"><span style="width:${d.confidence * 100}%"></span></div>
+      </div>
+      <div style="margin-left:auto;text-align:right">
+        ${pill} ${open}
+        <div class="k" style="margin-top:8px">tradeable</div>
+        <div>${d.tradeable ? 'yes' : `no (below ${d.min_conf})`}</div>
+      </div>
+    </div>
+    <div class="spark">${bars}</div>
+    <div class="meta">
+      <div><div class="k">pair / interval</div>${d.pair} ${d.interval}</div>
+      <div><div class="k">side</div>${d.side}</div>
+      <div><div class="k">last close</div>${d.last_close}</div>
+      <div><div class="k">candles</div>${d.candles}</div>
+      <div><div class="k">account</div>${d.account}</div>
+      <div><div class="k">walk-forward</div>${wf}</div>
+      <div><div class="k">session W/L</div>${sess}</div>
+    </div>
+    <div class="candle-call">
+      <div class="cc-head">${d.side} for the <b>next ${d.interval} candle</b></div>
+      <div class="cc-grid">
+        <div><div class="k">last closed candle</div>${clock(d.last_candle_time)}</div>
+        <div><div class="k">predicted candle opens</div><b>${clock(d.signal_candle_open)}</b></div>
+        <div><div class="k">predicted candle closes</div><b>${clock(d.signal_candle_close)}</b></div>
+        <div><div class="k">result ready in</div><b id="cc-countdown">${mmss(until(d.signal_candle_close))}</b></div>
+      </div>
+      <p class="note">The model reads candles closed up to ${clock(d.last_candle_time)} and calls the
+      candle from ${clock(d.signal_candle_open)} to ${clock(d.signal_candle_close)}. The running
+      candle between those two times is still forming; it is <b>not</b> traded. One call = one
+      candle: the next signal after this one is for the candle that follows it.</p>
+    </div>
+    <p class="note">Live ${d.source} feed, auto-refreshing. Probability of an up-close:
+    ${(d.probability*100).toFixed(1)}%. Signals are only printed once confidence clears
+    ${d.min_conf}.</p>`;
+}
+
+function renderBacktest(d) {
+  const wf = d.walk_forward;
+  if (d.error) {
+    $('backtest-body').innerHTML = `<p class="note">${d.source} feed error:
+      <span class="err">${d.error}</span></p>`;
+    return;
+  }
+  if (!wf) {
+    $('backtest-body').innerHTML = `<p class="note">${statusPill(d.status)}
+      Still loading history (${d.candles} candles) and training the model...</p>`;
+    return;
+  }
+  const breakeven = 100 / (1 + (d.payout || 0.8));
+  const beats = wf.rate >= breakeven;
+  const sweep = wf.sweep || [];
+  const rows = sweep.map(s => {
+    const rate = s.rate == null ? '—' : `${s.rate.toFixed(1)}%`;
+    const roi = s.roi == null ? '—' : `${s.roi > 0 ? '+' : ''}${s.roi.toFixed(1)}%`;
+    const good = s.rate != null && s.rate >= breakeven;
+    return `<tr>
+      <td>${(s.min_conf * 100).toFixed(0)}%</td>
+      <td>${s.signals}</td>
+      <td>${s.coverage.toFixed(1)}%</td>
+      <td style="color:${good ? '#3fb950' : 'inherit'}">${rate}</td>
+      <td style="color:${good ? '#3fb950' : 'inherit'}">${roi}</td>
+    </tr>`;
+  }).join('');
+  $('backtest-body').innerHTML = `
+    <div class="meta" style="margin-top:0">
+      <div><div class="k">walk-forward signals</div>${wf.signals}</div>
+      <div><div class="k">hit rate</div>${wf.rate.toFixed(1)}%</div>
+      <div><div class="k">coverage</div>${wf.coverage.toFixed(1)}%</div>
+      <div><div class="k">ROI / trade</div>${wf.roi > 0 ? '+' : ''}${wf.roi.toFixed(1)}%</div>
+      <div><div class="k">payout</div>${((d.payout || 0.8) * 100).toFixed(0)}%</div>
+      <div><div class="k">break-even</div>${breakeven.toFixed(1)}%</div>
+    </div>
+    ${rows ? `<table class="sweep">
+      <thead><tr><th>min conf</th><th>signals</th><th>coverage</th><th>hit rate</th><th>ROI / trade</th></tr></thead>
+      <tbody>${rows}</tbody></table>` : ''}
+    <p class="note ${beats ? '' : 'warn'}">Out-of-sample check on the candles the feed
+    trained on, at the ${((d.min_conf || 0.70) * 100).toFixed(0)}% confidence filter.
+    ${beats ? 'Beats break-even on this sample.' : 'Below break-even here — paper trade first.'}
+    Small signal counts are noisy.</p>`;
+}
+
+let liveTimer = null;
+let ccTarget = null;  // ISO instant the current signal resolves; drives the 1s countdown
+
+// Tick the "result ready in" clock every second, independent of the 10s poll.
+setInterval(() => {
+  const el = $('cc-countdown');
+  if (el && ccTarget) el.textContent = mmss(until(ccTarget));
+}, 1000);
+
+function stopLive() {
+  if (liveTimer) { clearInterval(liveTimer); liveTimer = null; }
+}
+
+async function pollLive() {
+  const pair = $('pair').value, interval = $('interval').value, source = $('source').value;
+  $('signal-err').textContent = '';
+  try {
+    const d = await getJSON(`/api/live?pair=${pair}&interval=${interval}&source=${source}`);
+    renderLive(d);
+    setStatus(d.error ? `${source} error` : (d.status === 'live' ? 'live' : d.status));
+  } catch (e) {
+    $('signal-err').textContent = e.message;
+    setStatus('error');
+  }
+}
+
+async function applyFloor() {
+  const pair = $('pair').value, interval = $('interval').value, source = $('source').value;
+  const min_conf = parseFloat($('floor').value);
+  $('signal-err').textContent = '';
+  setStatus('updating confidence floor...');
+  try {
+    const res = await fetch('/api/min-conf', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ pair, interval, source, min_conf }),
+    });
+    const d = await res.json();
+    if (!res.ok) throw new Error(d.error || ('HTTP ' + res.status));
+    renderLive(d);
+    setStatus('live');
+  } catch (e) {
+    $('signal-err').textContent = e.message;
+    setStatus('error');
+  }
+}
+
+async function loadSignal() {
+  stopLive();
+  const source = $('source').value;
+  $('signal-err').textContent = '';
+  $('go').disabled = true; setStatus('starting live feed...');
+  await pollLive();
+  await applyFloor();  // honour the chosen confidence floor
+  $('go').disabled = false;
+  liveTimer = setInterval(pollLive, 10000);
+}
+
+$('floor').addEventListener('change', () => { if (liveTimer) applyFloor(); });
+
+async function loadBacktest() {
+  const pair = $('pair').value, interval = $('interval').value, source = $('source').value;
+  $('backtest-err').textContent = '';
+  $('bt').disabled = true; setStatus('running backtest...');
+  try {
+    renderBacktest(await getJSON(`/api/backtest?pair=${pair}&interval=${interval}&source=${source}`));
+    setStatus('backtest ready');
+  } catch (e) {
+    $('backtest-err').textContent = e.message;
+    setStatus('error');
+  } finally { $('bt').disabled = false; }
+}
+
+async function loadLedger() {
+  $('ledger-err').textContent = '';
+  $('lg').disabled = true; setStatus('loading ledger...');
+  try {
+    renderLedger(await getJSON('/api/ledger'));
+    setStatus('ledger ready');
+  } catch (e) {
+    $('ledger-err').textContent = e.message;
+    setStatus('error');
+  } finally { $('lg').disabled = false; }
+}
+
+function renderLedger(d) {
+  if (!d.trades) {
+    $('ledger-body').innerHTML = `<p class="note">No resolved signals yet. The feed logs each
+      signal that clears the confidence filter once the next candle closes, then scores it WIN or LOSS.
+      Leave a pair connected and this fills in every candle.</p>`;
+    return;
+  }
+  const comboRows = (d.by_combo || []).map(c => `<tr><td>${c.combo}</td><td>${c.trades}</td>
+      <td>${c.wins}-${c.losses}</td><td class="${c.roi >= 0 ? 'up' : 'down'}">${c.win_rate}%</td>
+      <td class="${c.roi >= 0 ? 'up' : 'down'}">${c.roi >= 0 ? '+' : ''}${c.roi}%</td></tr>`).join('');
+  const recentRows = (d.recent || []).slice(0, 12).map(r => `<tr><td>${r.pair} ${r.interval}</td>
+      <td class="${r.direction === 'UP' ? 'up' : 'down'}">${r.direction}</td>
+      <td>${(r.confidence * 100).toFixed(1)}%</td>
+      <td class="${r.win ? 'up' : 'down'}">${r.win ? 'WIN' : 'LOSS'}</td>
+      <td>${r.pnl > 0 ? '+' : ''}${r.pnl.toFixed(2)}</td></tr>`).join('');
+  const overallClass = d.roi >= 0 ? 'up' : 'down';
+  $('ledger-body').innerHTML = `
+    <div class="stats">
+      <div><div class="k">trades</div>${d.trades}</div>
+      <div><div class="k">win rate</div><span class="${d.win_rate >= 55.6 ? 'up' : 'down'}">${d.win_rate}%</span></div>
+      <div><div class="k">ROI / trade</div><span class="${overallClass}">${d.roi >= 0 ? '+' : ''}${d.roi}%</span></div>
+    </div>
+    <p class="note">Forward record across ${d.by_combo.length} connected combo(s). At an 80% payout the
+    break-even win rate is 55.6%; below that a bet loses money over time. This only proves an edge
+    after many trades — treat small counts as noise.</p>
+    <table><thead><tr><th>combo</th><th>trades</th><th>W-L</th><th>win rate</th><th>ROI</th></tr></thead>
+    <tbody>${comboRows}</tbody></table>
+    <h3 class="sub-h">Latest resolved signals</h3>
+    <table><thead><tr><th>combo</th><th>call</th><th>conf</th><th>result</th><th>PnL</th></tr></thead>
+    <tbody>${recentRows}</tbody></table>`;
+}
+
+async function loadSmart() {
+  $('smart-err').textContent = '';
+  const source = $('source').value;
+  const interval = $('interval').value;
+  const pairs = Array.from($('pair').options).map(o => o.value);
+  $('smart-body').innerHTML = `<p class="note">Scanning ${pairs.length} pairs on ${interval}...
+    first run trains each one (~30-60s each), please wait.</p>`;
+  const rows = [];
+  for (const p of pairs) {
+    try {
+      const d = await getJSON(`/api/signals?pair=${p}&interval=${interval}&source=${source}`);
+      const wf = d.walk_forward || {};
+      if (wf.rate != null && wf.signals) {
+        rows.push({ pair: p, rate: wf.rate, signals: wf.signals, roi: wf.roi });
+      }
+    } catch (e) { /* one pair failing must not sink the scan */ }
+  }
+  if (!rows.length) {
+    $('smart-body').innerHTML = `<p class="note">Still training. Press "Smart scan" again in ~30s.</p>`;
+    return;
+  }
+  rows.sort((a, b) => b.rate - a.rate);
+  const medal = ['🥇', '🥈', '🥉'];
+  const flag = (r) => r >= 55 ? '✅' : r >= 52 ? '⚠️' : '🚫';
+  const body = rows.map((r, i) => `<tr><td>${medal[i] || ''} ${flag(r.rate)} ${r.pair}</td>
+    <td>${r.signals}</td><td>${r.rate.toFixed(1)}%</td>
+    <td class="${r.roi >= 0 ? 'up-txt' : 'down-txt'}">${r.roi >= 0 ? '+' : ''}${r.roi}%</td></tr>`).join('');
+  const best = rows[0];
+  $('smart-body').innerHTML = `
+    <table><thead><tr><th>pair</th><th>calls</th><th>win rate</th><th>ROI</th></tr></thead>
+    <tbody>${body}</tbody></table>
+    <p class="note">Best right now: <b>${best.pair} ${interval}</b> at ${best.rate.toFixed(1)}%.
+    Honest out-of-sample rate at your floor — never a guarantee, no trades placed.</p>`;
+}
+
+async function loadRisk() {
+  $('risk-err').textContent = '';
+  const pair = $('pair').value, interval = $('interval').value, source = $('source').value;
+  const bankroll = Number($('bankroll').value) || 1000;
+  $('risk-body').innerHTML = `<p class="note">Sizing ${pair} ${interval} for a $${bankroll.toLocaleString()} bankroll...</p>`;
+  try {
+    const d = await getJSON(`/api/risk?pair=${pair}&interval=${interval}&source=${source}&bankroll=${bankroll}`);
+    const icon = { 'positive-edge': '🟢', marginal: '🟡', 'no-edge': '🔴', unmeasured: '⏳' }[d.verdict] || '';
+    const s = d.sizing;
+    const sim = d.simulation || {};
+    const simRow = sim.trades
+      ? `<div class="meta">
+           <div><div class="k">what-if: $${sim.start} → $${sim.end}</div>${sim.return_pct >= 0 ? '+' : ''}${sim.return_pct}% over ${sim.trades} calls</div>
+           <div><div class="k">max drawdown</div>${sim.max_drawdown_pct}%</div>
+         </div>`
+      : `<p class="note">No resolved paper signals yet for this combo, so no bankroll replay.</p>`;
+    $('risk-body').innerHTML = `
+      <div class="signal"><div class="badge">${icon}</div>
+        <div><div class="k">verdict</div><div style="font-size:20px;font-weight:700">${d.verdict}</div>
+        <div class="note">${d.reason}</div></div></div>
+      <div class="meta">
+        <div><div class="k">payout</div>${pct(d.payout)}</div>
+        <div><div class="k">break-even win rate</div>${pct(d.break_even)}</div>
+        <div><div class="k">measured win rate</div>${s ? pct(s.win_rate) : '—'}</div>
+        <div><div class="k">edge</div>${s ? (s.edge >= 0 ? '+' : '') + pct(s.edge) : '—'}</div>
+        <div><div class="k">suggested stake</div><b>${s && s.tradeable ? '$' + s.stake.toFixed(2) : 'none'}</b></div>
+        <div><div class="k">expected value / $1</div>${s ? s.expected_value.toFixed(4) : '—'}</div>
+      </div>
+      ${simRow}
+      <p class="note">Position sizing only — no trade is placed. This is not financial advice.</p>`;
+  } catch (e) {
+    $('risk-body').innerHTML = `<p class="note">Press "Connect live" for this pair first, then try again.</p>`;
+    $('risk-err').textContent = e.message;
+  }
+}
+
+async function loadSmc() {
+  $('smc-err').textContent = '';
+  const pair = $('pair').value, interval = $('interval').value, source = $('source').value;
+  $('smc-body').innerHTML = `<p class="note">Reading ${pair} ${interval} structure...</p>`;
+  try {
+    const d = await getJSON(`/api/smc?pair=${pair}&interval=${interval}&source=${source}`);
+    if (d.ok === false) {
+      $('smc-body').innerHTML = `<p class="note">${d.reason || 'Not enough structure yet.'}</p>`;
+      return;
+    }
+    const biasIcon = { up: '📈', down: '📉', neutral: '↔️' }[d.bias] || '';
+    const gap = d.fair_value_gap
+      ? `${d.fair_value_gap.side} ${d.fair_value_gap.low}–${d.fair_value_gap.high}`
+      : 'none unfilled';
+    $('smc-body').innerHTML = `
+      <div class="signal"><div class="badge">${biasIcon}</div>
+        <div><div class="k">structure</div><div style="font-size:18px;font-weight:700">${d.structure}</div>
+        <div class="note">${d.bos !== 'none' ? d.bos : 'no break of structure'}</div></div></div>
+      <div class="meta">
+        <div><div class="k">range low / high</div>${d.range.low} / ${d.range.high}</div>
+        <div><div class="k">position in range</div>${(d.position * 100).toFixed(0)}%</div>
+        <div><div class="k">zone</div>${d.zone}</div>
+        <div><div class="k">unfilled fair-value gap</div>${gap}</div>
+        <div><div class="k">liquidity</div>${d.liquidity_sweep}</div>
+      </div>
+      <p class="note"><b>Read:</b> ${d.recommendation}</p>
+      <p class="note">${d.note}</p>`;
+  } catch (e) {
+    $('smc-body').innerHTML = `<p class="note">Press "Connect live" first, then try again.</p>`;
+    $('smc-err').textContent = e.message;
+  }
+}
+
+async function loadReadiness() {
+  $('rd-err').textContent = '';
+  $('rd-body').innerHTML = '<p class="note">Checking the forward record...</p>';
+  try {
+    const d = await getJSON('/api/readiness');
+    const a = d.overall;
+    const icon = { go: '🟢', 'forward-only': '🟡', 'no-go': '🔴' }[a.verdict] || '';
+    const rows = d.by_combo.length ? d.by_combo.map(c => {
+      const ci = { go: '🟢', 'forward-only': '🟡', 'no-go': '🔴' }[c.verdict] || '';
+      const rate = c.rate === null ? '—' : (c.rate * 100).toFixed(1) + '%';
+      return `<div><div class="k">${ci} ${c.combo}</div>${rate} over ${c.forward_trades} trades`
+        + (c.walk_forward_rate ? ` · wf ${c.walk_forward_rate}%` : '') + `</div>`;
+    }).join('') : '<div class="note">No resolved forward trades yet — flip decisions on paper (or with tiny size) long enough to build a record.</div>';
+    $('rd-body').innerHTML = `
+      <div class="signal"><div class="badge">${icon}</div>
+        <div><div class="k">verdict</div>
+        <div style="font-size:20px;font-weight:700">${a.verdict.toUpperCase()}</div>
+        <div class="note">${a.forward_wins}/${a.forward_trades} forward · break-even ${(a.break_even * 100).toFixed(1)}%</div></div></div>
+      <div class="meta">
+        <div><div class="k">win rate</div>${a.rate === null ? '—' : (a.rate * 100).toFixed(1) + '%'}</div>
+        <div><div class="k">95% lower bound</div>${a.wilson_lower === null ? '—' : (a.wilson_lower * 100).toFixed(1) + '%'}</div>
+        <div><div class="k">p-value</div>${a.p_value === null ? '—' : a.p_value}</div>
+        <div><div class="k">min trades for a verdict</div>${a.min_trades}</div>
+      </div>
+      <p class="note"><b>Why:</b> ${a.reason}</p>
+      <div class="meta">${rows}</div>
+      <p class="note">${d.note}</p>`;
+  } catch (e) {
+    $('rd-body').innerHTML = '<p class="note">Could not load readiness.</p>';
+    $('rd-err').textContent = e.message;
+  }
+}
+
+$('go').addEventListener('click', loadSignal);
+$('bt').addEventListener('click', loadBacktest);
+$('sm').addEventListener('click', loadSmart);
+$('sx').addEventListener('click', loadSmc);
+$('rk').addEventListener('click', loadRisk);
+$('rd').addEventListener('click', loadReadiness);
+$('lg').addEventListener('click', loadLedger);
+loadSignal();
+loadLedger();
+</script>
+</body>
+</html>

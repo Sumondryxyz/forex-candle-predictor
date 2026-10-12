@@ -1,0 +1,23 @@
+# Slim image for the live web app on Render (and any other host).
+#
+# The live signal path uses only pandas/scikit-learn/flask/websockets. It does
+# NOT need lightgbm (research CLI) or pyquotex (optional Quotex source), which
+# keeps the build small and fast. Everything the app needs to be correct is
+# still installed, and the model backend reports itself on /api/health.
+FROM python:3.13-slim
+
+WORKDIR /app
+ENV PYTHONUNBUFFERED=1 PYTHONDONTWRITEBYTECODE=1 HOST=0.0.0.0
+
+COPY requirements-web.txt .
+RUN pip install --no-cache-dir -r requirements-web.txt
+
+COPY . .
+
+# Render injects PORT (default 10000). Fall back to 10000 for a bare docker run.
+ENV PORT=10000
+EXPOSE 10000
+
+# One worker: the candle feed lives in this process. gthread handles the
+# dashboard's concurrent polling while the feed thread keeps streaming.
+CMD ["sh", "-c", "gunicorn -w 1 -k gthread --threads 8 -t 120 -b 0.0.0.0:${PORT} 'predictor.webapp:create_app()'"]

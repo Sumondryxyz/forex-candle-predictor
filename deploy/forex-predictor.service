@@ -1,0 +1,22 @@
+[Unit]
+Description=Forex candle predictor web app (signals only, never trades)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/forex-candle-predictor
+Environment=PORT=12000
+Environment=HOST=0.0.0.0
+Environment=MIN_CONF=0.60
+Environment=HISTORY_HOURS=72
+ExecStart=/opt/forex-candle-predictor/.venv/bin/python -m predictor.webapp
+Restart=always
+RestartSec=5
+# Keep trying forever; the feed reconnects on its own.
+StartLimitIntervalSec=0
+StandardOutput=append:/var/log/forex-predictor.log
+StandardError=append:/var/log/forex-predictor.log
+
+[Install]
+WantedBy=multi-user.target
