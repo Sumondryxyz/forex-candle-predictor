@@ -239,10 +239,14 @@ def format_smc(pair: str, interval: str) -> str:
            if a.get("fair_value_gap") else "none unfilled")
     rows = [
         head,
-        f"{icon} Structure: <b>{html.escape(a['structure'])}</b>"
-        + (f" · {html.escape(a['bos'])}" if a["bos"] != "none" else ""),
-        f"Range: {a['range']['low']} – {a['range']['high']} "
-        f"({a['position']:.0%} of range)",
+        (
+            f"{icon} Structure: <b>{html.escape(a['structure'])}</b>"
+            + (f" · {html.escape(a['bos'])}" if a["bos"] != "none" else "")
+        ),
+        (
+            f"Range: {a['range']['low']} – {a['range']['high']} "
+            f"({a['position']:.0%} of range)"
+        ),
         f"Zone: {html.escape(a['zone'])}",
         f"Gap: {html.escape(gap)} · Liquidity: {html.escape(a['liquidity_sweep'])}",
         f"<i>{html.escape(smc.recommendation(a))}</i>",
@@ -527,7 +531,7 @@ def push_loop(tg: Telegram, state: State, stop: threading.Event) -> None:
                     tg.send(chat_id, f"🏦 Structure: {icon} {html.escape(a['structure'])} · "
                                      f"{html.escape(a['zone'])}")
             except Exception:  # noqa: BLE001 - context must never block a signal
-                pass
+                log.debug("smc context failed for %s %s", pair, interval)
             state.update(chat_id, last_signal=marker)
 
 
@@ -558,13 +562,13 @@ def main() -> None:
                 if msg and msg.get("text"):
                     try:
                         handle(tg, state, msg)
-                    except Exception as exc:  # noqa: BLE001
-                        log.exception("handler failed: %s", exc)
+                    except Exception:
+                        log.exception("handler failed")
         except requests.RequestException as exc:
             log.warning("poll failed: %s", exc)
             time.sleep(3)
-        except Exception as exc:  # noqa: BLE001
-            log.exception("loop error: %s", exc)
+        except Exception:
+            log.exception("loop error")
             time.sleep(3)
 
 

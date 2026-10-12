@@ -22,14 +22,13 @@ from __future__ import annotations
 
 import json
 import os
-import re
 import sys
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from predictor.session_capture import build_session, save_session  # noqa: E402
+from predictor.session_capture import build_session, save_session
 
 HOST = os.getenv("CAPTURE_HOST", "127.0.0.1")
 PORT = int(os.getenv("CAPTURE_PORT", "8787"))
@@ -162,10 +161,10 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
-    def do_OPTIONS(self) -> None:  # noqa: N802
+    def do_OPTIONS(self) -> None:
         self._send(204, b"", "text/plain")
 
-    def do_GET(self) -> None:  # noqa: N802
+    def do_GET(self) -> None:
         path = self.path.split("?", 1)[0]
         if path in ("/", "/index.html"):
             html = (PAGE.replace("__CAPTURE_BM__", BOOKMARKLET)
@@ -184,7 +183,7 @@ class Handler(BaseHTTPRequestHandler):
         else:
             self._send(404, b"not found", "text/plain")
 
-    def do_POST(self) -> None:  # noqa: N802
+    def do_POST(self) -> None:
         if self.path.split("?", 1)[0] != "/save":
             self._send(404, b"not found", "text/plain")
             return

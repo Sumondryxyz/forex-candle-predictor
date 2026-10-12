@@ -51,9 +51,10 @@ def test_non_object_session_is_rejected(tmp_path):
 
 def test_apply_points_login_at_the_configured_host():
     """qxbroker.com is hard-coded upstream; apply() must retarget it."""
-    pyquotex = pytest.importorskip("pyquotex")
-    from predictor import quotex_session
+    pytest.importorskip("pyquotex")
     from pyquotex.network.login import Login
+
+    from predictor import quotex_session
 
     quotex_session._applied = False
     quotex_session.apply("market-qx.trade")
@@ -64,8 +65,9 @@ def test_apply_points_login_at_the_configured_host():
 def test_apply_adds_a_reason_phrase_shim():
     """curl_cffi responses have no reason_phrase; the login error path needs it."""
     pytest.importorskip("pyquotex")
-    from predictor import quotex_session
     from pyquotex.network import navigator
+
+    from predictor import quotex_session
 
     quotex_session._applied = False
     quotex_session.apply("market-qx.trade")

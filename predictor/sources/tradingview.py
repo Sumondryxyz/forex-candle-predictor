@@ -119,7 +119,7 @@ class TradingViewClient:
             while len(bars) < want and more <= max_more:
                 try:
                     raw = await asyncio.wait_for(ws.recv(), timeout=15)
-                except asyncio.TimeoutError:
+                except TimeoutError:
                     break
                 for kind, obj in _parse(raw):
                     if kind == "hb":

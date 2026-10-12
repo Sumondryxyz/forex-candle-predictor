@@ -96,7 +96,7 @@ class _FakeWS:
 
     async def recv(self):
         if not self._script:
-            raise asyncio.TimeoutError  # client treats this as "no more data"
+            raise TimeoutError  # client treats this as "no more data"
         return self._script.pop(0)
 
     async def __aenter__(self):

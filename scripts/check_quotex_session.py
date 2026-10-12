@@ -53,8 +53,9 @@ def check(data: dict) -> bool:
 
 def live_test() -> None:
     try:
-        from predictor.quotex_session import apply
         from pyquotex.stable_api import Quotex
+
+        from predictor.quotex_session import apply
     except ImportError as exc:
         print(f"\n  ! pyquotex not installed ({exc}); skipping the live test.")
         print("    pip install git+https://github.com/cleitonleonel/pyquotex.git")

@@ -13,7 +13,7 @@ import asyncio
 import os
 import time
 from collections import deque
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from pyquotex.stable_api import Quotex
 
@@ -34,7 +34,7 @@ arrays = engine.arrays
 
 
 def stamp(epoch):
-    return datetime.fromtimestamp(epoch, tz=timezone.utc).strftime("%H:%M:%S")
+    return datetime.fromtimestamp(epoch, tz=UTC).strftime("%H:%M:%S")
 
 
 async def main():

@@ -121,7 +121,8 @@ def test_push_announces_result_once(state, monkeypatch):
     state.update(42, subscribed=True)
 
     tg = FakeTelegram()
-    import threading, time
+    import threading
+    import time
     stop = threading.Event()
     t = threading.Thread(target=tb.push_loop, args=(tg, state, stop), daemon=True)
     t.start()

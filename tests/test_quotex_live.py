@@ -122,7 +122,6 @@ def test_gapped_candle_does_not_resolve_the_signal(tmp_path, monkeypatch):
     f = feed_mod.BaseFeed("EURUSD", "1m")
     f.min_conf = 0.0
     _bootstrap(f, _candles(1200))
-    last = f._candles[-1]["time"]
 
     # A candle from an entirely different era: 1m period expected, gap is huge.
     stale = _candles(1, start=1_600_000_000, seed=3)[0]

@@ -16,7 +16,7 @@ from __future__ import annotations
 import json
 import os
 import threading
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 _DEFAULT_PATH = "var/ledger.jsonl"
@@ -71,12 +71,12 @@ class Ledger:
         went_up = exit_close > entry_close
         win = went_up == (direction == "UP")
         candle_iso = (
-            datetime.fromtimestamp(candle_time, tz=timezone.utc).isoformat()
+            datetime.fromtimestamp(candle_time, tz=UTC).isoformat()
             if candle_time is not None
             else None
         )
         row = {
-            "resolved_at": datetime.now(timezone.utc).isoformat(),
+            "resolved_at": datetime.now(UTC).isoformat(),
             "candle_time": candle_iso,
             "pair": pair,
             "interval": interval,

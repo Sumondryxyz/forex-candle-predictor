@@ -7,8 +7,6 @@ tuned on. Compare against the fixed 0.70 floor on the same late half.
 """
 from __future__ import annotations
 
-import numpy as np
-
 from predictor import engine
 from predictor.sources.tradingview import fetch_ohlc
 

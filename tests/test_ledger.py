@@ -74,9 +74,11 @@ def test_partial_trailing_line_is_tolerated(tmp_path):
 def test_same_candle_is_recorded_only_once(tmp_path):
     path = tmp_path / "ledger.jsonl"
     led = Ledger(path=str(path))
-    kw = dict(pair="EURUSD", interval="1m", source="tradingview", direction="UP",
-              confidence=0.9, entry_close=1.1, exit_close=1.1005, payout=0.8,
-              candle_time=1_700_000_000)
+    kw = {
+        "pair": "EURUSD", "interval": "1m", "source": "tradingview",
+        "direction": "UP", "confidence": 0.9, "entry_close": 1.1,
+        "exit_close": 1.1005, "payout": 0.8, "candle_time": 1_700_000_000,
+    }
     led.record(**kw)
     led.record(**kw)  # re-ingested candle, same resolution
     assert len(led.rows()) == 1

@@ -101,8 +101,8 @@ def run(pairs, intervals, days):
                         losses[f] += 1
     print(f"\nrows compared: {rows}")
     print(f"{'floor':<8}{'new wins':>10}{'new loses':>10}")
-    for f in wins:
-        print(f"{f:<8}{wins[f]:>10}{losses[f]:>10}")
+    for f, w in wins.items():
+        print(f"{f:<8}{w:>10}{losses[f]:>10}")
 
 
 if __name__ == "__main__":

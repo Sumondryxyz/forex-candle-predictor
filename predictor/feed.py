@@ -15,7 +15,7 @@ import os
 import threading
 import time
 from collections import deque
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from . import engine
 from .ledger import Ledger
@@ -150,7 +150,7 @@ class BaseFeed:
             "account": self.account,
             "market_open": is_market_open(),
             "next_candle_open": next_candle_open(self.interval).isoformat(),
-            "updated": datetime.fromtimestamp(updated, tz=timezone.utc).isoformat() if updated else None,
+            "updated": datetime.fromtimestamp(updated, tz=UTC).isoformat() if updated else None,
             "candles": len(candles),
             "walk_forward": walk,
             "payout": self.payout,
@@ -181,20 +181,20 @@ class BaseFeed:
                 "tradeable": conf >= self.min_conf,
                 "last_close": float(last["close"]),
                 "last_candle_time": datetime.fromtimestamp(
-                    last["time"], tz=timezone.utc
+                    last["time"], tz=UTC
                 ).isoformat(),
                 # The signal is for the very next candle: it opens when the last
                 # closed candle ended and resolves when it closes. Both instants
                 # are reported so the UI can say exactly which candle is called.
                 "signal_candle_open": datetime.fromtimestamp(
-                    last["time"] + self.period, tz=timezone.utc
+                    last["time"] + self.period, tz=UTC
                 ).isoformat(),
                 "signal_candle_close": datetime.fromtimestamp(
-                    last["time"] + 2 * self.period, tz=timezone.utc
+                    last["time"] + 2 * self.period, tz=UTC
                 ).isoformat(),
                 "recent": [
                     {
-                        "time": datetime.fromtimestamp(x["time"], tz=timezone.utc).isoformat(),
+                        "time": datetime.fromtimestamp(x["time"], tz=UTC).isoformat(),
                         "open": float(x["open"]),
                         "high": float(x["high"]),
                         "low": float(x["low"]),
@@ -273,7 +273,7 @@ class BaseFeed:
                             "exit_close": float(candle["close"]),
                             "win": win,
                             "resolved_at": datetime.fromtimestamp(
-                                candle["time"], tz=timezone.utc
+                                candle["time"], tz=UTC
                             ).isoformat(),
                         }
                         LEDGER.record(
