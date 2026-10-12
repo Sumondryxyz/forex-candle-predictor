@@ -187,6 +187,23 @@ The high thresholds were the real lever: base35 pooled hit rises 57.1% (0.70)
   `predictor/quotex_session.load_session` already reads (flat or email-keyed).
 - Never commit `session.json`; it holds a bearer token. It is gitignored.
 
+## Using it for real money (read this first)
+- The engine NEVER places a trade and there is no broker-execution path. That is
+  deliberate: it is a signal + risk tool, not an autotrader. Do not add one.
+- The only number that decides real-money sizing is whether the HONEST
+  walk-forward win rate clears the broker's break-even `1 / (1 + payout)`
+  (55.6% at 80% payout). Confidence alone is not an edge; a 54% signal loses
+  money over time no matter how confident it feels.
+- `predictor/risk.py` is that arithmetic: `break_even_rate`, `expected_value`,
+  `kelly_fraction`, `suggest_stake`, `assess`, and `simulate_bankroll` (replays
+  the paper ledger as a compounding what-if). Stake is quarter-Kelly, hard-capped
+  at 2% of bankroll, and 0 whenever the edge is <= 0.
+- Surfaces: `/risk [PAIR] [INTERVAL] [BANKROLL]` (Telegram), `/api/risk` (web,
+  includes the bankroll replay), and the "Risk & stake" card.
+- Discipline for live use: forward-test on the paper ledger for weeks first;
+  only act when `verdict == positive-edge`; never chase a losing combo; the FX
+  edge (~55-58%) is thin, so treat any single result as noise.
+
 ## Reading the signal (how it is meant to be used)
 - The honest edge is small (~55-58%). Do not advertise more. `format_signal`
   and `/signal` print the confidence floor next to every call for this reason.

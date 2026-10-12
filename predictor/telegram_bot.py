@@ -20,6 +20,7 @@ from pathlib import Path
 
 import requests
 
+from . import risk
 from .webapp import DEFAULT_SOURCE, InputError, _intervals, _pairs, get_feed
 
 log = logging.getLogger("telegram_bot")
@@ -116,6 +117,14 @@ def _pct(x) -> str:
     return f"{x * 100:.1f}%" if isinstance(x, (int, float)) else "—"
 
 
+def _is_number(s: str) -> bool:
+    try:
+        float(s)
+        return True
+    except (TypeError, ValueError):
+        return False
+
+
 def format_signal(snap: dict) -> str:
     pair = html.escape(snap.get("pair", "?"))
     interval = html.escape(snap.get("interval", "?"))
@@ -173,6 +182,43 @@ def format_result(snap: dict) -> str:
         f"Entry {res.get('entry_close')} → exit {res.get('exit_close')}",
         f"<i>resolved {html.escape(str(res.get('resolved_at'))[11:19])} UTC · paper only</i>",
     ])
+
+
+def format_risk(snap: dict, bankroll: float) -> str:
+    """Position-size a signal against its own honest, measured edge.
+
+    This is the number that decides whether real money should follow a signal:
+    not the confidence, but whether the walk-forward win rate clears the
+    broker's break-even. It never places the trade.
+    """
+    pair = html.escape(str(snap.get("pair", "?")))
+    interval = html.escape(str(snap.get("interval", "?")))
+    if snap.get("error"):
+        return f"⚠️ <b>{pair} {interval}</b>\n{html.escape(str(snap['error']))}"
+    payout = float(snap.get("payout") or 0.80)
+    wf = snap.get("walk_forward") or {}
+    rate = wf.get("rate")
+    rate_frac = (float(rate) / 100.0) if rate is not None else None
+    a = risk.assess(rate_frac, payout, bankroll)
+
+    icon = {"positive-edge": "🟢", "marginal": "🟡", "no-edge": "🔴",
+            "unmeasured": "⏳"}[a["verdict"]]
+    rows = [
+        f"💰 <b>Risk — {pair} {interval}</b>",
+        f"Verdict: {icon} <b>{a['verdict']}</b> — {html.escape(a['reason'])}",
+        f"Payout: {_pct(payout)} · break-even win rate: <b>{_pct(risk.break_even_rate(payout))}</b>",
+        f"Bankroll: ${bankroll:,.0f} · full Kelly: {a['sizing']['kelly_fraction']:.2%}" if a["sizing"] else "",
+    ]
+    if a["sizing"] and a["sizing"]["tradeable"]:
+        s = a["sizing"]
+        rows.append(f"<b>Suggested stake: ${s['stake']:,.2f}</b> "
+                    f"({s['stake_fraction']:.2%} of bankroll, quarter-Kelly capped)")
+        rows.append(f"Expected value per $1: {s['expected_value']:+.4f} "
+                    f"(edge {s['edge']:+.2%})")
+    else:
+        rows.append("No stake suggested — the measured edge does not clear break-even.")
+    rows.append("<i>Position sizing only — no trade is placed. Real money is your call.</i>")
+    return "\n".join(r for r in rows if r)
 
 
 def format_scan(snaps: list[dict]) -> str:
@@ -240,6 +286,7 @@ HELP = (
     "/result [PAIR] [INTERVAL] — how the previous call closed (WIN/LOSS)\n"
     "/scan — every configured pair at your interval\n"
     "/smart — rank pairs by their honest out-of-sample win rate\n"
+    "/risk [PAIR] [INTERVAL] [BANKROLL] — stake size vs the measured edge\n"
     "/session — paper WIN/LOSS record\n"
     "/pairs — available pairs and intervals\n"
     "/setpair EURUSD — remember a default pair\n"
@@ -265,6 +312,17 @@ def handle(tg: Telegram, state: State, msg: dict) -> None:
     takes_pair = cmd in ("/signal", "/result")
     pair = (args[0].upper() if args and takes_pair else None) or prefs.get("pair") or _pairs()[0]
     interval = (args[1] if len(args) > 1 and takes_pair else None) or prefs.get("interval") or _intervals()[0]
+    if cmd == "/risk":
+        # /risk [PAIR] [INTERVAL] [BANKROLL] in any order; unknown args ignored.
+        for a in args:
+            if a.upper() in _pairs():
+                pair = a.upper()
+            elif a in _intervals():
+                interval = a
+        if not any(a.upper() in _pairs() for a in args):
+            pair = prefs.get("pair") or pair
+        if not any(a in _intervals() for a in args):
+            interval = prefs.get("interval") or interval
 
     if cmd in ("/start", "/help"):
         tg.send(chat_id, HELP)
@@ -337,6 +395,15 @@ def handle(tg: Telegram, state: State, msg: dict) -> None:
             tg.send(chat_id, f"Unknown pair {html.escape(pair)}. Pairs: " + ", ".join(_pairs()))
             return
         tg.send(chat_id, format_result(_safe_snapshot(pair, interval)))
+        return
+
+    if cmd == "/risk":
+        bankroll = prefs.get("bankroll") or 100.0
+        num = [a for a in args if _is_number(a)]
+        if num:
+            bankroll = float(num[-1])
+            state.update(chat_id, bankroll=bankroll)
+        tg.send(chat_id, format_risk(_safe_snapshot(pair, interval), bankroll))
         return
 
     if cmd == "/scan":

@@ -262,3 +262,36 @@ def test_smart_command_uses_stub_feed(state, monkeypatch):
     tg = FakeTelegram()
     tb.handle(tg, state, _msg("/smart"))
     assert tg.sent and "Smart scan" in tg.sent[0][1]
+
+
+# ---------------------------------------------------------------- risk
+def _wf_frac(rate_pct):
+    return {"rate": rate_pct, "signals": 80, "roi": 1.0, "coverage": 10.0}
+
+
+def test_format_risk_positive_edge_suggests_a_stake():
+    out = tb.format_risk(_snap(walk_forward=_wf_frac(58.0), payout=0.80), 1000.0)
+    assert "positive-edge" in out
+    assert "Suggested stake" in out
+    assert "55.6%" in out  # break-even at 80% payout
+
+
+def test_format_risk_no_edge_suggests_nothing():
+    out = tb.format_risk(_snap(walk_forward=_wf_frac(50.0), payout=0.80), 1000.0)
+    assert "no-edge" in out
+    assert "No stake suggested" in out
+
+
+def test_format_risk_unmeasured_when_no_walk_forward():
+    out = tb.format_risk(_snap(walk_forward={}), 1000.0)
+    assert "unmeasured" in out
+
+
+def test_risk_command_parses_bankroll_and_remembers_it(state, monkeypatch):
+    monkeypatch.setattr(tb, "_safe_snapshot",
+                        lambda p, i: _snap(pair=p, interval=i, walk_forward=_wf_frac(58.0)))
+    tg = FakeTelegram()
+    tb.handle(tg, state, _msg("/risk EURUSD 5m 500"))
+    assert tg.sent and "Risk" in tg.sent[0][1]
+    assert "$500" in tg.sent[0][1]
+    assert state.get(42)["bankroll"] == 500.0

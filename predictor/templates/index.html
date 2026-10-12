@@ -134,9 +134,14 @@
         <option value="0.90">0.90</option>
       </select>
     </div>
+    <div>
+      <label for="bankroll">Bankroll ($)</label>
+      <input id="bankroll" type="number" min="1" step="10" value="1000" style="width:90px">
+    </div>
     <button id="go">Connect live</button>
     <button id="bt" class="ghost">Run backtest</button>
     <button id="sm" class="ghost">Smart scan</button>
+    <button id="rk" class="ghost">Risk &amp; stake</button>
     <button id="lg" class="ghost">Refresh ledger</button>
     <span id="status" class="pill">ready</span>
   </div>
@@ -154,6 +159,12 @@
       <div id="backtest-err" class="err"></div>
     </section>
   </div>
+
+  <section class="card ledger-card">
+    <h2>Risk &amp; stake <span class="note-inline">real-money sizing — no trade placed</span></h2>
+    <div id="risk-body"><p class="note">Press "Risk &amp; stake" to size this signal against its honest measured edge. If the walk-forward rate is below break-even, the suggested stake is $0 — that is the point.</p></div>
+    <div id="risk-err" class="err"></div>
+  </section>
 
   <section class="card ledger-card">
     <h2>Smart scan <span class="note-inline">which pair / interval actually has an edge</span></h2>
@@ -476,9 +487,46 @@ async function loadSmart() {
     Honest out-of-sample rate at your floor — never a guarantee, no trades placed.</p>`;
 }
 
+async function loadRisk() {
+  $('risk-err').textContent = '';
+  const pair = $('pair').value, interval = $('interval').value, source = $('source').value;
+  const bankroll = Number($('bankroll').value) || 1000;
+  $('risk-body').innerHTML = `<p class="note">Sizing ${pair} ${interval} for a $${bankroll.toLocaleString()} bankroll...</p>`;
+  try {
+    const d = await getJSON(`/api/risk?pair=${pair}&interval=${interval}&source=${source}&bankroll=${bankroll}`);
+    const icon = { 'positive-edge': '🟢', marginal: '🟡', 'no-edge': '🔴', unmeasured: '⏳' }[d.verdict] || '';
+    const s = d.sizing;
+    const sim = d.simulation || {};
+    const simRow = sim.trades
+      ? `<div class="meta">
+           <div><div class="k">what-if: $${sim.start} → $${sim.end}</div>${sim.return_pct >= 0 ? '+' : ''}${sim.return_pct}% over ${sim.trades} calls</div>
+           <div><div class="k">max drawdown</div>${sim.max_drawdown_pct}%</div>
+         </div>`
+      : `<p class="note">No resolved paper signals yet for this combo, so no bankroll replay.</p>`;
+    $('risk-body').innerHTML = `
+      <div class="signal"><div class="badge">${icon}</div>
+        <div><div class="k">verdict</div><div style="font-size:20px;font-weight:700">${d.verdict}</div>
+        <div class="note">${d.reason}</div></div></div>
+      <div class="meta">
+        <div><div class="k">payout</div>${pct(d.payout)}</div>
+        <div><div class="k">break-even win rate</div>${pct(d.break_even)}</div>
+        <div><div class="k">measured win rate</div>${s ? pct(s.win_rate) : '—'}</div>
+        <div><div class="k">edge</div>${s ? (s.edge >= 0 ? '+' : '') + pct(s.edge) : '—'}</div>
+        <div><div class="k">suggested stake</div><b>${s && s.tradeable ? '$' + s.stake.toFixed(2) : 'none'}</b></div>
+        <div><div class="k">expected value / $1</div>${s ? s.expected_value.toFixed(4) : '—'}</div>
+      </div>
+      ${simRow}
+      <p class="note">Position sizing only — no trade is placed. This is not financial advice.</p>`;
+  } catch (e) {
+    $('risk-body').innerHTML = `<p class="note">Press "Connect live" for this pair first, then try again.</p>`;
+    $('risk-err').textContent = e.message;
+  }
+}
+
 $('go').addEventListener('click', loadSignal);
 $('bt').addEventListener('click', loadBacktest);
 $('sm').addEventListener('click', loadSmart);
+$('rk').addEventListener('click', loadRisk);
 $('lg').addEventListener('click', loadLedger);
 loadSignal();
 loadLedger();

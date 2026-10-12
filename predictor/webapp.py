@@ -208,6 +208,48 @@ def create_app() -> Flask:
             return jsonify({"error": "recent must be an integer"}), 400
         return jsonify(LEDGER.summary(recent=recent))
 
+    @app.get("/api/risk")
+    def risk_view():
+        """Position sizing for one signal, plus a what-if bankroll replay.
+
+        Never places a trade: given the honest walk-forward rate it returns the
+        break-even rate, the edge, a capped fractional-Kelly stake, and how the
+        paper ledger would have compounded at a fixed stake fraction.
+        """
+        pair = request.args.get("pair", "EURUSD")
+        interval = request.args.get("interval", "5m")
+        source = request.args.get("source")
+        try:
+            bankroll = float(request.args.get("bankroll", 1000))
+            stake_fraction = float(request.args.get("stake_fraction", 0.01))
+        except (TypeError, ValueError):
+            return jsonify({"error": "bankroll and stake_fraction must be numbers"}), 400
+        try:
+            snap = compute_signals(pair, interval, source)
+        except InputError as exc:
+            return jsonify({"error": str(exc)}), 400
+        from . import risk
+
+        rate = (snap.get("walk_forward") or {}).get("rate")
+        rate_frac = (float(rate) / 100.0) if rate is not None else None
+        payout = float(snap.get("payout") or 0.80)
+        verdict = risk.assess(rate_frac, payout, bankroll)
+        rows = [
+            r for r in LEDGER.rows()
+            if r.get("pair") == pair.upper() and r.get("interval") == interval
+        ]
+        sim = risk.simulate_bankroll(rows, bankroll, stake_fraction=stake_fraction)
+        return jsonify({
+            "pair": pair.upper(),
+            "interval": interval,
+            "source": snap.get("source"),
+            "payout": payout,
+            "break_even": risk.break_even_rate(payout),
+            **verdict,
+            "simulation": sim,
+            "note": "Position sizing only. No trade is placed; this is not advice.",
+        })
+
     return app
 
 
