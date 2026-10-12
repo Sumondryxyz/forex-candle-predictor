@@ -221,6 +221,34 @@ def format_risk(snap: dict, bankroll: float) -> str:
     return "\n".join(r for r in rows if r)
 
 
+def format_smc(pair: str, interval: str) -> str:
+    """Smart Money Concepts read of the structure, for humans. Not a signal."""
+    from . import smc
+
+    try:
+        candles = get_feed(pair, interval).candles(300)
+    except InputError as exc:
+        return f"⚠️ {html.escape(str(exc))}"
+    a = smc.analyze(candles)
+    head = f"🏦 <b>SMC — {html.escape(pair)} {html.escape(interval)}</b>"
+    if not a.get("ok"):
+        return f"{head}\n{a.get('reason', 'not enough structure')}"
+    icon = {"up": "📈", "down": "📉", "neutral": "↔️"}.get(a["bias"], "")
+    gap = (f"{a['fair_value_gap']['side']} {a['fair_value_gap']['low']}–{a['fair_value_gap']['high']}"
+           if a.get("fair_value_gap") else "none unfilled")
+    rows = [
+        head,
+        f"{icon} Structure: <b>{html.escape(a['structure'])}</b>"
+        + (f" · {html.escape(a['bos'])}" if a["bos"] != "none" else ""),
+        f"Range: {a['range']['low']} – {a['range']['high']} "
+        f"({a['position']:.0%} of range)",
+        f"Zone: {html.escape(a['zone'])}",
+        f"Gap: {html.escape(gap)} · Liquidity: {html.escape(a['liquidity_sweep'])}",
+        f"<i>{html.escape(smc.recommendation(a))}</i>",
+    ]
+    return "\n".join(rows)
+
+
 def format_scan(snaps: list[dict]) -> str:
     rows = ["<b>Scan</b>"]
     for s in snaps:
@@ -287,6 +315,7 @@ HELP = (
     "/scan — every configured pair at your interval\n"
     "/smart — rank pairs by their honest out-of-sample win rate\n"
     "/risk [PAIR] [INTERVAL] [BANKROLL] — stake size vs the measured edge\n"
+    "/smc [PAIR] [INTERVAL] — market-structure read (order blocks, liquidity)\n"
     "/session — paper WIN/LOSS record\n"
     "/pairs — available pairs and intervals\n"
     "/setpair EURUSD — remember a default pair\n"
@@ -309,7 +338,7 @@ def handle(tg: Telegram, state: State, msg: dict) -> None:
     args = parts[1:]
 
     prefs = state.get(chat_id)
-    takes_pair = cmd in ("/signal", "/result")
+    takes_pair = cmd in ("/signal", "/result", "/smc")
     pair = (args[0].upper() if args and takes_pair else None) or prefs.get("pair") or _pairs()[0]
     interval = (args[1] if len(args) > 1 and takes_pair else None) or prefs.get("interval") or _intervals()[0]
     if cmd == "/risk":
@@ -406,6 +435,10 @@ def handle(tg: Telegram, state: State, msg: dict) -> None:
         tg.send(chat_id, format_risk(_safe_snapshot(pair, interval), bankroll))
         return
 
+    if cmd == "/smc":
+        tg.send(chat_id, format_smc(pair, interval))
+        return
+
     if cmd == "/scan":
         snaps = [_safe_snapshot(p, interval) for p in _pairs()]
         tg.send(chat_id, format_scan(snaps))
@@ -451,6 +484,17 @@ def push_loop(tg: Telegram, state: State, stop: threading.Event) -> None:
             if state.last_sent(chat_id) == marker:
                 continue  # already pushed this candle
             tg.send(chat_id, "🔔 " + format_signal(snap))
+            # Context, not a call: one-line structure read so a live trade has
+            # the order-block / premium-discount picture next to it.
+            try:
+                from . import smc
+                a = smc.analyze(get_feed(pair, interval).candles(300))
+                if a.get("ok"):
+                    icon = {"up": "📈", "down": "📉", "neutral": "↔️"}.get(a["bias"], "")
+                    tg.send(chat_id, f"🏦 Structure: {icon} {html.escape(a['structure'])} · "
+                                     f"{html.escape(a['zone'])}")
+            except Exception:  # noqa: BLE001 - context must never block a signal
+                pass
             state.update(chat_id, last_signal=marker)
 
 

@@ -250,6 +250,40 @@ def create_app() -> Flask:
             "note": "Position sizing only. No trade is placed; this is not advice.",
         })
 
+    @app.get("/api/smc")
+    def smc_view():
+        """Smart Money Concepts read of market structure for one combo.
+
+        Analysis only — order blocks, fair-value gaps, liquidity sweeps and
+        premium/discount. It does NOT predict a direction and places no trade;
+        we A/B-tested SMC as model features and it did not win out-of-sample, so
+        it stays a human-readable overlay next to the signal.
+        """
+        pair = request.args.get("pair", "EURUSD")
+        interval = request.args.get("interval", "5m")
+        source = request.args.get("source")
+        try:
+            limit = max(20, min(int(request.args.get("limit", 300)), 1000))
+        except ValueError:
+            return jsonify({"error": "limit must be an integer"}), 400
+        from . import smc
+
+        try:
+            feed = get_feed(pair, interval, source)
+            candles = feed.candles(limit)
+        except InputError as exc:
+            return jsonify({"error": str(exc)}), 400
+        snap = feed.snapshot()
+        analysis = smc.analyze(candles)
+        return jsonify({
+            "pair": pair.upper(),
+            "interval": interval,
+            "source": snap.get("source"),
+            "candles": len(candles),
+            **analysis,
+            "recommendation": smc.recommendation(analysis),
+        })
+
     return app
 
 

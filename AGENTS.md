@@ -223,8 +223,28 @@ The high thresholds were the real lever: base35 pooled hit rises 57.1% (0.70)
   out-of-sample slice, apply it to a later slice): `research_adaptive_floor.py`
   was 6 wins / 10 losses / 1 tie vs the fixed 0.70 floor. The chosen floor does
   not transfer; keep the fixed floor.
+- **Smart Money Concepts (SMC) as model features** (order blocks, fair-value
+  gaps, liquidity sweeps, break of structure, premium/discount):
+  `research_smc_features.py` A/B was 4/4 at floor 0.55, 3/5 at 0.60, 4/4 at 0.65
+  across 8 pair/intervals — a coin-flip, and the floors that "won" had only
+  18-39 signals. NOT wired into the model. Shipped instead as the read-only
+  analysis layer `predictor/smc.py` (see below).
 - Lesson: on FX the honest edge is fragile. Always A/B with the harness on the
   SAME data (and both halves of the walk-forward) before shipping "smarter".
+
+## Smart Money analysis (`predictor/smc.py`) — analysis, not a signal
+SMC is deliberately NOT a model feature (measured above, did not win). It is a
+human-readable overlay that explains the structure behind a call:
+- Reads confirmed swings (k=3 either side, so no look-ahead), market structure
+  (HH/HL vs LH/LL), break of structure, the last unfilled fair-value gap, liquidity
+  sweeps in the last 5 bars, and premium/discount position in the range.
+- Surfaces: `/smc [PAIR] [INTERVAL]` (Telegram), `/api/smc` (web), the "Smart
+  money" card, and a one-line structure note appended to each push alert.
+- `smc.recommendation()` only says how structure and the premium/discount zone
+  line up (e.g. "bullish structure in discount"). It is NOT a direction call and
+  NOT a probability — the model's own probability remains the actual signal.
+- Do not "promote" SMC to a feature without a fresh A/B that wins on both halves
+  of the walk-forward.
 
 ## Getting work onto GitHub (the sandbox token is read-only)
 - The injected GITHUB_TOKEN is a `ghu_` GitHub App user token with read-only

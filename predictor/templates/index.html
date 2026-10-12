@@ -141,6 +141,7 @@
     <button id="go">Connect live</button>
     <button id="bt" class="ghost">Run backtest</button>
     <button id="sm" class="ghost">Smart scan</button>
+    <button id="sx" class="ghost">Smart money</button>
     <button id="rk" class="ghost">Risk &amp; stake</button>
     <button id="lg" class="ghost">Refresh ledger</button>
     <span id="status" class="pill">ready</span>
@@ -159,6 +160,12 @@
       <div id="backtest-err" class="err"></div>
     </section>
   </div>
+
+  <section class="card ledger-card">
+    <h2>Smart money analysis <span class="note-inline">market structure — analysis only, not a signal</span></h2>
+    <div id="smc-body"><p class="note">Press "Smart money" for an order-block / liquidity / premium-discount read of this pair. It explains the structure behind the signal; it does not predict direction on its own.</p></div>
+    <div id="smc-err" class="err"></div>
+  </section>
 
   <section class="card ledger-card">
     <h2>Risk &amp; stake <span class="note-inline">real-money sizing — no trade placed</span></h2>
@@ -523,9 +530,43 @@ async function loadRisk() {
   }
 }
 
+async function loadSmc() {
+  $('smc-err').textContent = '';
+  const pair = $('pair').value, interval = $('interval').value, source = $('source').value;
+  $('smc-body').innerHTML = `<p class="note">Reading ${pair} ${interval} structure...</p>`;
+  try {
+    const d = await getJSON(`/api/smc?pair=${pair}&interval=${interval}&source=${source}`);
+    if (d.ok === false) {
+      $('smc-body').innerHTML = `<p class="note">${d.reason || 'Not enough structure yet.'}</p>`;
+      return;
+    }
+    const biasIcon = { up: '📈', down: '📉', neutral: '↔️' }[d.bias] || '';
+    const gap = d.fair_value_gap
+      ? `${d.fair_value_gap.side} ${d.fair_value_gap.low}–${d.fair_value_gap.high}`
+      : 'none unfilled';
+    $('smc-body').innerHTML = `
+      <div class="signal"><div class="badge">${biasIcon}</div>
+        <div><div class="k">structure</div><div style="font-size:18px;font-weight:700">${d.structure}</div>
+        <div class="note">${d.bos !== 'none' ? d.bos : 'no break of structure'}</div></div></div>
+      <div class="meta">
+        <div><div class="k">range low / high</div>${d.range.low} / ${d.range.high}</div>
+        <div><div class="k">position in range</div>${(d.position * 100).toFixed(0)}%</div>
+        <div><div class="k">zone</div>${d.zone}</div>
+        <div><div class="k">unfilled fair-value gap</div>${gap}</div>
+        <div><div class="k">liquidity</div>${d.liquidity_sweep}</div>
+      </div>
+      <p class="note"><b>Read:</b> ${d.recommendation}</p>
+      <p class="note">${d.note}</p>`;
+  } catch (e) {
+    $('smc-body').innerHTML = `<p class="note">Press "Connect live" first, then try again.</p>`;
+    $('smc-err').textContent = e.message;
+  }
+}
+
 $('go').addEventListener('click', loadSignal);
 $('bt').addEventListener('click', loadBacktest);
 $('sm').addEventListener('click', loadSmart);
+$('sx').addEventListener('click', loadSmc);
 $('rk').addEventListener('click', loadRisk);
 $('lg').addEventListener('click', loadLedger);
 loadSignal();

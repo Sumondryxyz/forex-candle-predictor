@@ -44,6 +44,21 @@ def _msg(text, chat_id=42):
     return {"chat": {"id": chat_id}, "text": text}
 
 
+class _StubFeed:
+    """Feed stub that serves a synthetic zigzag so SMC has structure to read."""
+
+    def candles(self, limit=300):
+        out = []
+        px = 1.1000
+        for i in range(60):
+            step = 0.0006 if (i // 4) % 2 == 0 else -0.0004
+            o = px
+            px = round(px + step, 6)
+            out.append({"open": o, "high": max(o, px) + 0.0001,
+                        "low": min(o, px) - 0.0001, "close": px})
+        return out
+
+
 # ---------------------------------------------------------------- formatting
 def test_format_signal_shows_direction_confidence_floor():
     out = tb.format_signal(_snap())
@@ -295,3 +310,21 @@ def test_risk_command_parses_bankroll_and_remembers_it(state, monkeypatch):
     assert tg.sent and "Risk" in tg.sent[0][1]
     assert "$500" in tg.sent[0][1]
     assert state.get(42)["bankroll"] == 500.0
+
+
+# ---------------------------------------------------------------- smc
+def test_format_smc_renders_structure(monkeypatch):
+    from predictor import smc
+
+    monkeypatch.setattr(tb, "get_feed", lambda p, i: _StubFeed())
+    out = tb.format_smc("EURUSD", "5m")
+    assert "SMC" in out
+    assert "Structure" in out
+    assert smc  # module import guard
+
+
+def test_smc_command_routes(state, monkeypatch):
+    monkeypatch.setattr(tb, "format_smc", lambda p, i: f"SMC {p} {i}")
+    tg = FakeTelegram()
+    tb.handle(tg, state, _msg("/smc GBPUSD 15m"))
+    assert tg.sent and tg.sent[0][1] == "SMC GBPUSD 15m"
