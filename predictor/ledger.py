@@ -39,6 +39,10 @@ class Ledger:
         # re-acquires it. A plain Lock deadlocks here.
         self._lock = threading.RLock()
         self._seen: set[tuple] | None = None
+        # Set once a write fails (e.g. an unwritable LEDGER_PATH); persistence
+        # then stays off instead of raising on every resolved candle.
+        self._write_failed = False
+        self.last_error: str | None = None
 
     @staticmethod
     def _key(*, pair: str, interval: str, candle_time: float | None) -> tuple:
@@ -99,9 +103,18 @@ class Ledger:
                 if key in self._seen:
                     return row
                 self._seen.add(key)
-            self.path.parent.mkdir(parents=True, exist_ok=True)
-            with self.path.open("a", encoding="utf-8") as fh:
-                fh.write(json.dumps(row) + "\n")
+            if not self._write_failed:
+                try:
+                    self.path.parent.mkdir(parents=True, exist_ok=True)
+                    with self.path.open("a", encoding="utf-8") as fh:
+                        fh.write(json.dumps(row) + "\n")
+                except OSError as exc:
+                    # An unwritable LEDGER_PATH (e.g. /var/data on Render's free
+                    # plan, where no disk is mounted) must not take the feed down
+                    # on every resolved candle. Log once, then keep scoring in
+                    # memory only.
+                    self._write_failed = True
+                    self.last_error = str(exc)
         return row
 
     def rows(self) -> list[dict]:

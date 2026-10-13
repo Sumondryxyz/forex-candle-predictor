@@ -34,9 +34,10 @@ services:
         value: 1m,5m,15m,30m,1h
       - key: LEDGER_ENABLED
         value: "1"
-      # Keep the paper-trading record across redeploys: a Render disk mounted at
-      # /var/data, with the ledger written inside it. On the free plan a disk is
-      # not available; the record then resets on deploy, which is acceptable for
-      # a demo but not for a long-running scoreboard.
+      # Paper-trading record. On the free plan there is no persistent disk, so
+      # write inside the container's writable app dir: the record survives while
+      # the instance runs and resets on each deploy. To keep it across deploys,
+      # attach a Render disk at /var/data and set LEDGER_PATH to
+      # /var/data/ledger.jsonl (a write failure there is now ignored, not fatal).
       - key: LEDGER_PATH
-        value: /var/data/ledger.jsonl
+        value: /app/var/ledger.jsonl

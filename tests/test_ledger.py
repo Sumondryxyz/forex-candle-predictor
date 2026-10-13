@@ -95,3 +95,20 @@ def test_duplicate_rows_already_in_the_file_are_collapsed(tmp_path):
         fh.write(json.dumps(row) + "\n")  # a legacy duplicate
     assert len(led.rows()) == 1
     assert led.summary()["trades"] == 1
+
+
+def test_unwritable_path_is_ignored_not_fatal(tmp_path, monkeypatch):
+    """Render's free plan has no disk at /var/data; a bad LEDGER_PATH must not
+    raise on every resolved candle -- the row is still returned, in memory."""
+    ledger = Ledger(path=str(tmp_path / "nope" / "ledger.jsonl"))
+
+    def boom(*a, **k):
+        raise PermissionError(13, "Permission denied")
+
+    monkeypatch.setattr("pathlib.Path.mkdir", boom)
+    row = ledger.record(pair="EURUSD", interval="1m", source="tradingview",
+                        direction="UP", confidence=0.8, entry_close=1.1,
+                        exit_close=1.11, payout=0.8, candle_time=123.0)
+    assert row["win"] is True
+    assert ledger._write_failed is True
+    assert ledger.last_error
