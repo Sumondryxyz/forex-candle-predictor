@@ -134,6 +134,14 @@ places trades. Live data comes from an unofficial TradingView chart websocket
   signals"; the 5m signal has no measurable edge and should not be trusted.**
   Defaults now offer 1m,5m,15m,30m,1h, and `MIN_HISTORY_CANDLES` (3000) keeps
   30m/1h from being starved by a 72h `HISTORY_HOURS`.
+- **The 1h edge is confirmed on a large sample.** `research_accuracy.py` (the
+  scoreboard: hit rate + Wilson lower bound + binomial p-value per pair) over
+  250 days, all six majors, floor 0.70: **ALL n=963, 66.8%, Wilson lo 63.7%,
+  p<0.001 -> EDGE.** Four pairs individually significant (GBPUSD 68.7%,
+  USDCHF 73.6%, USDCAD 75.0%, USDJPY 63.0%). The same report over 120 days shows
+  5m 53.9% (Wilson lo 50.3%, p=0.84) and 15m 55.2% (Wilson lo 50.3%, p=0.58):
+  both below break-even's lower bound, i.e. no usable edge. Run
+  `python research_accuracy.py --intervals 1h --days 250` to reproduce.
 - `readiness.p_value` computes the binomial tail in log space (`lgamma`): the
   old `comb()` sum raised `OverflowError` once n reached a few hundred, which a
   1h backtest hits routinely. Guarded by a test.
