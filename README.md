@@ -168,6 +168,7 @@ Useful environment variables:
 | `WEB_PAIRS` | EURUSD,GBPUSD,USDJPY,AUDUSD,USDCHF,USDCAD | pairs offered in the dropdown |
 | `WEB_INTERVALS` | 1m,5m,15m | intervals offered |
 | `MIN_CONF` | 0.70 | skip signals below this confidence |
+| `CONSENSUS` | 0 | cross-pair confirmation: a pooled model must agree before a signal is tradeable (fewer signals, higher hit rate) |
 | `PAYOUT` | 0.80 | payout used for the walk-forward ROI |
 | `HISTORY_HOURS` | 72 | history to train on |
 | `RETRAIN_EVERY` | 60 | retrain after this many new candles |

@@ -88,6 +88,19 @@ places trades. Live data comes from an unofficial TradingView chart websocket
   windows the average hit rate at 0.70 beat 0.65 in *every* window (58.1% vs
   52.9% on 30 days; 59.3% vs 57.0% on 90 days) with net-positive ROI throughout.
   Fewer signals, better accuracy. Re-measure with `research_sweep.py --min-conf`.
+- **Cross-pair confirmation (`CONSENSUS=1`, off by default).** A signal only
+  counts as tradeable when a second model, trained on *every* live pair of the
+  same interval, predicts the same direction. Measured 15m, 6 majors, ~53 days,
+  rolling walk-forward: hit rate at 0.70 rose **55.2% -> 57.8%** and improved
+  *every* pair; 348 signals became 277. On 5m the same filter changed nothing
+  (there is no 5m edge to confirm — 46.9% alone), which is the honest reason it
+  is opt-in and documented as 15m-only. The pooled model is cached
+  (`CONSENSUS_RETRAIN`, default 300s) and only trains when >= 2 pairs are live,
+  so a single-pair deploy is unaffected. See `predictor/consensus.py`.
+- **Tried and rejected: the ensemble backend (`advanced.py`, linear+GBM blend).**
+  On the same 15m walk-forward it *lost* to the plain linear model (52.4% vs
+  56.1% at 0.70) — the GBM overfits FX noise, as the engine docstring warns.
+  Do not switch the live model to it without a fresh A/B.
 - `engine._train_linear` isotonic-calibrates on a held-out tail (80/20) when
   history >= `MODEL_CALIB_MIN` (1500). Set `MODEL_CALIBRATE=0` to disable.
   Calibration helps overall but hurt GBPUSD 15m - expected, not a bug.

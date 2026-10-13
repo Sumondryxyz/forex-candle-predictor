@@ -17,7 +17,7 @@ import time
 from collections import deque
 from datetime import UTC, datetime
 
-from . import engine
+from . import consensus, engine
 from .ledger import Ledger
 from .scheduler import interval_seconds, is_market_open, next_candle_open
 
@@ -72,6 +72,9 @@ class BaseFeed:
         # gain (per-combo late-half: 12 wins, 14 losses), so it is opt-in and
         # off by default. See AGENTS.md.
         self.use_volume = _env_flag("USE_VOLUME", False)
+        # Cross-pair confirmation (opt-in). See predictor/consensus.py: a second
+        # model trained on every live pair must agree before a signal counts.
+        self.consensus = _env_flag("CONSENSUS", False)
         self.account = "-"
         self._client_factory = client_factory or self._default_client
 
@@ -95,6 +98,9 @@ class BaseFeed:
         # Raw out-of-sample arrays, kept so set_min_conf() can re-threshold
         # without retraining the model.
         self._walk_forward_raw: dict | None = None
+        # Last cross-pair confirmation verdict for the pending signal (None when
+        # the feature is off or too few pairs are live).
+        self._consensus_ok: bool | None = None
         self._status = "idle"
         self._error: str | None = None
         self._updated: float | None = None
@@ -140,6 +146,7 @@ class BaseFeed:
             walk = self._walk_forward
             updated = self._updated
             last_result = self._last_result
+            consensus_ok = self._consensus_ok
 
         out = {
             "pair": self.pair,
@@ -156,6 +163,8 @@ class BaseFeed:
             "payout": self.payout,
             "min_conf": self.min_conf,
             "last_result": last_result,
+            "consensus": self.consensus,
+            "confirmed": consensus_ok,
             "session": {
                 "signals": len(results),
                 "wins": int(sum(results)),
@@ -172,13 +181,18 @@ class BaseFeed:
         direction = "UP" if prob > 0.5 else "DOWN"
         conf = max(prob, 1 - prob)
         last = candles[-1]
+        tradeable = conf >= self.min_conf
+        if self.consensus and consensus_ok is False:
+            # Pooled model disagrees: hold the signal back. A missing verdict
+            # (too few pairs live yet) never blocks -- it just can't confirm.
+            tradeable = False
         out.update(
             {
                 "direction": direction,
                 "side": "CALL" if direction == "UP" else "PUT",
                 "probability": round(prob, 4),
                 "confidence": round(conf, 4),
-                "tradeable": conf >= self.min_conf,
+                "tradeable": tradeable,
                 "last_close": float(last["close"]),
                 "last_candle_time": datetime.fromtimestamp(
                     last["time"], tz=UTC
@@ -295,6 +309,9 @@ class BaseFeed:
                     o, h, low, c, t,
                     engine.volumes(self._candles) if self.use_volume else None,
                 )
+                if self.consensus:
+                    # Feed the pooled model this pair's current features.
+                    consensus.REGISTRY.publish(self.pair, self.interval, X, c)
                 if self._since_retrain >= self.retrain_every:
                     refreshed = engine.train(X, c)
                     if refreshed is not None:
@@ -303,8 +320,13 @@ class BaseFeed:
                 prob = float(self._model.prob(X[-1:])[0])
                 direction = "UP" if prob > 0.5 else "DOWN"
                 conf = max(prob, 1 - prob)
+                self._consensus_ok = None
                 if conf >= self.min_conf:
                     sig_time = float(t[-1])
+                    if self.consensus:
+                        self._consensus_ok = consensus.REGISTRY.agrees(
+                            self.pair, self.interval, X[-1], direction
+                        )
                     self._pending = {
                         "dir": direction,
                         "ref_close": c[-1],
@@ -358,6 +380,8 @@ class BaseFeed:
                 X, c, min_conf=self.min_conf, payout=self.payout
             )
             self._updated = time.time()
+        if self.consensus:
+            consensus.REGISTRY.publish(self.pair, self.interval, X, c)
         self._set_status("live")
 
     async def _run(self) -> None:
