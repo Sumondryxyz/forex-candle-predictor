@@ -18,6 +18,8 @@ import os
 import random
 import re
 import string
+import threading
+import time
 
 from ..scheduler import interval_seconds
 
@@ -31,6 +33,30 @@ RESOLUTION = {"1m": "1", "5m": "5", "15m": "15", "30m": "30", "1h": "60"}
 DEFAULT_EXCHANGE = os.getenv("TRADINGVIEW_EXCHANGE", "FX")
 MAX_BARS = 5000
 CHUNK = 300
+
+# TradingView rejects a burst of websocket handshakes with HTTP 429. Each feed
+# opens a socket per poll, so every extra pair multiplies the rate and enough
+# pairs push it over the limit. Pace handshakes process-wide: a minimum gap
+# between opens, plus a retry/backoff that honours the 429 before giving up.
+_CONNECT_LOCK = threading.Lock()
+_LAST_CONNECT = 0.0
+_MIN_CONNECT_GAP = float(os.getenv("TV_CONNECT_GAP", "0.6"))
+_RATE_LIMIT_RETRIES = int(os.getenv("TV_RATE_RETRIES", "6"))
+
+
+def _pace_connect() -> None:
+    """Serialise handshakes with a small gap so a burst cannot trip the limiter."""
+    global _LAST_CONNECT
+    with _CONNECT_LOCK:
+        wait = _LAST_CONNECT + _MIN_CONNECT_GAP - time.monotonic()
+        if wait > 0:
+            time.sleep(wait)
+        _LAST_CONNECT = time.monotonic()
+
+
+def _is_rate_limited(exc: Exception) -> bool:
+    text = str(exc)
+    return "429" in text or "Too Many Requests" in text or "InvalidStatus" in text
 
 
 def symbol_for(pair: str) -> str:
@@ -93,7 +119,26 @@ class TradingViewClient:
         return None
 
     async def get_candles(self, pair: str, end: float, count: int, period: int) -> list[dict]:
-        """Return up to ``count`` most recent closed candles, oldest first."""
+        """Return up to ``count`` most recent closed candles, oldest first.
+
+        Retries the handshake when TradingView answers 429, backing off so a
+        burst of feeds settles instead of failing permanently.
+        """
+        delay = 1.0
+        last_exc: Exception | None = None
+        for _ in range(_RATE_LIMIT_RETRIES + 1):
+            _pace_connect()
+            try:
+                return await self._get_candles_once(pair, end, count, period)
+            except Exception as exc:
+                last_exc = exc
+                if not _is_rate_limited(exc):
+                    raise
+                await asyncio.sleep(delay)
+                delay = min(delay * 2, 20.0)
+        raise last_exc if last_exc else RuntimeError("TradingView request failed")
+
+    async def _get_candles_once(self, pair: str, end: float, count: int, period: int) -> list[dict]:
         import websockets
 
         interval = _interval_from_period(period)

@@ -36,6 +36,13 @@ places trades. Live data comes from an unofficial TradingView chart websocket
   (`wss://data.tradingview.com/...`), not a documented data API. Be honest about
   this when asked; it can change without notice and is outside TradingView ToS.
 - The live feed caches history in `predictor/feed.py` (`MAX_CANDLES = 6000`).
+- **429 on pair bursts (fixed 2026-10).** Each feed opens one websocket per
+  poll, so every pair adds to the handshake rate and TradingView starts
+  answering HTTP 429 — with ten pairs about half the feeds failed to connect.
+  `tradingview.py` now paces handshakes process-wide (`_pace_connect`, default
+  0.6s gap, `TV_CONNECT_GAP`) and retries a 429 with exponential backoff
+  (`TV_RATE_RETRIES`, default 6). Ten concurrent pairs all connect now. If more
+  pairs are added, raise `TV_CONNECT_GAP` rather than removing the pacing.
 
 ## Keeping it running
 - No init/supervisor here (PID 1 is `openhands-agent`, `systemctl` offline,

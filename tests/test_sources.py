@@ -132,3 +132,46 @@ def test_get_candles_assembles_bars_and_pages_history(monkeypatch):
     assert any("request_more_data" in s for s in ws.sent)
     assert any("~h~7" in s for s in ws.sent)  # heartbeat echoed back
 
+
+def test_get_candles_retries_through_a_429(monkeypatch):
+    """A burst of pairs makes TradingView answer 429; the client must back off
+    and retry instead of failing the feed."""
+    import websockets
+
+    good = [
+        tv_source._frame("timescale_update", ["cs_1", {"sds_1": {"s": [
+            {"i": 0, "v": [1704067200, 1.10, 1.11, 1.09, 1.105, 7.0]},
+        ]}}]),
+        tv_source._frame("series_completed", ["cs_1", "sds_1"]),
+    ]
+    attempts = {"n": 0}
+
+    def connect(*a, **k):
+        attempts["n"] += 1
+        if attempts["n"] == 1:
+            raise RuntimeError(
+                "InvalidStatus: server rejected WebSocket connection: HTTP 429"
+            )
+        return _FakeWS(list(good))
+
+    monkeypatch.setattr(websockets, "connect", connect)
+    monkeypatch.setattr(tv_source, "_MIN_CONNECT_GAP", 0.0)
+
+    async def _no_sleep(*_):
+        return None
+
+    monkeypatch.setattr(tv_source.asyncio, "sleep", _no_sleep)
+
+    async def run():
+        return await tv_source.TradingViewClient().get_candles("EURUSD", 0, 300, 60)
+
+    rows = asyncio.run(run())
+    assert attempts["n"] == 2  # first handshake 429'd, second succeeded
+    assert len(rows) == 1
+
+
+def test_rate_limit_detection():
+    assert tv_source._is_rate_limited(RuntimeError("HTTP 429"))
+    assert tv_source._is_rate_limited(RuntimeError("Too Many Requests"))
+    assert not tv_source._is_rate_limited(RuntimeError("some other failure"))
+
