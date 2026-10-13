@@ -31,8 +31,12 @@ USER_AGENT = (
 )
 RESOLUTION = {"1m": "1", "5m": "5", "15m": "15", "30m": "30", "1h": "60"}
 DEFAULT_EXCHANGE = os.getenv("TRADINGVIEW_EXCHANGE", "FX")
-MAX_BARS = 5000
-CHUNK = 300
+# TradingView serves ~9.5k 1m bars of history (8.7 days); ask for the maximum
+# and let the stall guard stop when it runs out. A larger CHUNK means fewer
+# request_more_data round-trips -- 300 made a 9k-bar pull take ~2 minutes, 1000
+# does it in ~2 seconds.
+MAX_BARS = int(os.getenv("TV_MAX_BARS", "10000"))
+CHUNK = int(os.getenv("TV_CHUNK", "1000"))
 
 # TradingView rejects a burst of websocket handshakes with HTTP 429. Each feed
 # opens a socket per poll, so every extra pair multiplies the rate and enough
@@ -161,11 +165,13 @@ class TradingViewClient:
 
             more = 0
             max_more = max(0, (want - CHUNK + CHUNK - 1) // CHUNK)
+            stall = 0
             while len(bars) < want and more <= max_more:
                 try:
                     raw = await asyncio.wait_for(ws.recv(), timeout=15)
                 except TimeoutError:
                     break
+                before = len(bars)
                 for kind, obj in _parse(raw):
                     if kind == "hb":
                         token = f"~h~{obj}"
@@ -183,6 +189,11 @@ class TradingViewClient:
                         await ws.send(_frame("request_more_data", [cs, "sds_1", CHUNK]))
                     elif method == "series_error":
                         raise RuntimeError(f"TradingView series error for {symbol}: {params}")
+                # If a few paged rounds add nothing, the history simply ends
+                # there; stop instead of burning 15s recv-timeouts until `want`.
+                stall = stall + 1 if len(bars) == before else 0
+                if stall >= 3:
+                    break
 
         ordered = [bars[t] for t in sorted(bars)]
         return [

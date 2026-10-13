@@ -4,6 +4,7 @@ import pandas as pd
 import pytest
 
 from predictor.sources import DEFAULT_SOURCE, get_fetcher
+from predictor.sources import dukascopy as duka_source
 from predictor.sources import quotex as quotex_source
 from predictor.sources import tradingview as tv_source
 
@@ -16,6 +17,10 @@ def test_tradingview_is_the_default():
 
 def test_quotex_is_still_selectable():
     assert get_fetcher("quotex") is quotex_source.fetch_ohlc
+
+
+def test_dukascopy_is_selectable():
+    assert get_fetcher("dukascopy") is duka_source.fetch_ohlc
 
 
 def test_unknown_source_is_rejected():
@@ -109,6 +114,7 @@ class _FakeWS:
 def test_get_candles_assembles_bars_and_pages_history(monkeypatch):
     import websockets
 
+    monkeypatch.setattr(tv_source, "CHUNK", 300)  # script chunks are 2 bars each
     first_chunk = tv_source._frame("timescale_update", ["cs_1", {"sds_1": {"s": [
         {"i": 0, "v": [1704067200, 1.10, 1.11, 1.09, 1.105, 7.0]},
         {"i": 1, "v": [1704067260, 1.105, 1.12, 1.10, 1.115, 9.0]},
@@ -138,6 +144,7 @@ def test_get_candles_retries_through_a_429(monkeypatch):
     and retry instead of failing the feed."""
     import websockets
 
+    monkeypatch.setattr(tv_source, "CHUNK", 300)
     good = [
         tv_source._frame("timescale_update", ["cs_1", {"sds_1": {"s": [
             {"i": 0, "v": [1704067200, 1.10, 1.11, 1.09, 1.105, 7.0]},
@@ -168,6 +175,64 @@ def test_get_candles_retries_through_a_429(monkeypatch):
     rows = asyncio.run(run())
     assert attempts["n"] == 2  # first handshake 429'd, second succeeded
     assert len(rows) == 1
+
+
+
+
+def _make_bi5(day, records):
+    """Build an LZMA-compressed Dukascopy day from (ms, o, c, low, high, vol)."""
+    import lzma
+    import struct
+    payload = b"".join(struct.pack(">5if", *r) for r in records)
+    return lzma.compress(payload)
+
+
+def test_dukascopy_decode_reads_records():
+    import datetime as dt
+    day = dt.date(2024, 1, 3)
+    raw = _make_bi5(day, [(0, 108039, 108034, 108032, 108040, 86.15),
+                          (60000, 108034, 108040, 108030, 108045, 12.5)])
+    rows = duka_source._decode(raw, day)
+    assert len(rows) == 2
+    ts, o, h, low, c, v = rows[1]
+    assert ts == dt.datetime(2024, 1, 3, 0, 1, tzinfo=dt.UTC)
+    assert (o, h, low, c) == (1.08034, 1.08045, 1.08030, 1.08040)
+    assert v == 12.5
+
+
+def test_dukascopy_404_is_an_empty_day(monkeypatch):
+    import datetime as dt
+    import urllib.error
+
+    def boom(*a, **k):
+        raise urllib.error.HTTPError("u", 404, "missing", {}, None)
+
+    monkeypatch.setattr(duka_source.urllib.request, "urlopen", boom)
+    assert duka_source._fetch_day("EURUSD", dt.date(2024, 1, 6)) == []
+
+
+def test_dukascopy_resamples_1m_to_slower(monkeypatch):
+    import datetime as dt
+
+    idx = pd.date_range("2024-01-03", periods=5, freq="1min", tz="UTC")
+    cols = {"open": [1.0, 1.1, 1.2, 1.3, 1.4],
+            "high": [1.5, 1.1, 1.2, 1.9, 1.4],
+            "low": [0.9, 1.0, 1.1, 1.2, 1.3],
+            "close": [1.1, 1.2, 1.25, 1.4, 1.45],
+            "volume": [1.0, 1.0, 1.0, 1.0, 1.0]}
+
+    def fake_day(pair, day, **k):
+        return [(t.to_pydatetime(), o, h, l, c, v) for t, o, h, l, c, v in
+                zip(idx, cols["open"], cols["high"], cols["low"],
+                    cols["close"], cols["volume"])]
+
+    monkeypatch.setattr(duka_source, "_fetch_day", fake_day)
+    monkeypatch.setattr(duka_source.time, "sleep", lambda *_: None)
+    df = duka_source.fetch_ohlc("EURUSD", "5m", 1, end=dt.date(2024, 1, 3))
+    assert len(df) == 1
+    assert df.iloc[0]["open"] == 1.0
+    assert df.iloc[0]["close"] == 1.45
+    assert df.iloc[0]["high"] == 1.9
 
 
 def test_rate_limit_detection():

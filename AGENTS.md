@@ -181,6 +181,28 @@ places trades. Live data comes from an unofficial TradingView chart websocket
   1m sees only ~5.5 days (5m ~26 days, 15m ~75 days). A model cannot learn a
   durable edge from a few days of one regime. This is why the edge only appears
   once the timeframe is slow enough (30m/1h) to get months of history.
+  `predictor/sources/dukascopy.py` lifts the cap: free per-day 1m files going
+  back years (LZMA, 24-byte big-endian records), reachable from datacenter IPs
+  though throttled to ~0.5-1 request/s. `research_fetch_duka.py` caches months
+  to a pickle and `research_duka_accuracy.py` scores 1m/5m/15m/1h on the same
+  resampled prices, so the fast timeframes can finally be tested with real
+  history instead of a 5.5-day sample.
+- **The "5100 candle cap" was ours, not TradingView's.** `MAX_BARS` (5000) was
+  truncating every request; TradingView actually serves ~9.5k 1m bars (8.7 days)
+  and far more on slower timeframes. Raised `MAX_BARS` to 10000 (env
+  `TV_MAX_BARS`) and `CHUNK` from 300 to 1000 (env `TV_CHUNK`): a 9k-bar pull
+  went from ~2 minutes to ~2 seconds, and 1h now fetches 10000 bars (~587 days)
+  instead of 5000. The paging loop also stops after 3 rounds with no new bars,
+  so it no longer burns 15s recv-timeouts after history runs out.
+- **More 1h history made the edge stronger, not weaker.** With 10000 bars
+  (~580 days), six majors, floor 0.70: ALL n=923, **69.8% hit, Wilson lo 66.7%,
+  p<0.001** (up from 66.8% on 250 days), and four pairs are now each
+  individually significant (GBPUSD 68.5%, AUDUSD 64.1%, USDCHF 78.5%,
+  USDCAD 69.4%).
+- **Even near-double 1m history does not help.** Pulling the full ~9.5k 1m bars
+  (8.7 days, vs 5.5 before) still scores ALL n=1364, 49.9%, Wilson lo 47.2%,
+  p=1.000 at floor 0.70 -- no edge. The fast-timeframe problem is not only
+  sample size; 1m has no repeatable structure worth the spread.
 - `readiness.p_value` computes the binomial tail in log space (`lgamma`): the
   old `comb()` sum raised `OverflowError` once n reached a few hundred, which a
   1h backtest hits routinely. Guarded by a test.
