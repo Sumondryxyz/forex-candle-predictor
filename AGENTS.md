@@ -73,8 +73,10 @@ places trades. Live data comes from an unofficial TradingView chart websocket
 - Heterogeneous edge is the norm: EURUSD/GBPUSD 5m-15m carry a small edge,
   USDJPY 15m was a coin-flip. Never trust one pair/interval.
 - **Pair screen (measured 2026-10, 30/45/~53-day windows, payout 0.80).** The
-  default set is EURUSD, GBPUSD, USDJPY, AUDUSD, USDCHF, USDCAD, EURJPY, GBPJPY,
-  CADJPY, NZDCAD. TradingView history caps at ~5100 candles, so "90 days" is
+  default set is the six majors: EURUSD, GBPUSD, USDJPY, AUDUSD, USDCHF, USDCAD.
+  EURJPY/GBPJPY/CADJPY/NZDCAD were tried and then **reverted** — they connect but
+  add load without a proven edge, and on a free tier the extra feeds risk the
+  memory limit. TradingView history caps at ~5100 candles, so "90 days" is
   really ~53. Break-even at 0.80 is 55.56%. **No pair cleared it across
   windows:** CADJPY/NZDCAD/AUDUSD/GBPJPY 15m looked good on one window and fell
   to 47-53% on another; USDCHF 15m was below break-even in every window

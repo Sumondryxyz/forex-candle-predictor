@@ -30,10 +30,7 @@ from .feed import LEDGER
 from .quotex_live import QuotexFeed
 from .tradingview_live import TradingViewFeed
 
-DEFAULT_PAIRS = [
-    "EURUSD", "GBPUSD", "USDJPY", "AUDUSD", "USDCHF", "USDCAD",
-    "EURJPY", "GBPJPY", "CADJPY", "NZDCAD",
-]
+DEFAULT_PAIRS = ["EURUSD", "GBPUSD", "USDJPY", "AUDUSD", "USDCHF", "USDCAD"]
 DEFAULT_INTERVALS = ["1m", "5m", "15m"]
 
 SOURCES = {"tradingview": TradingViewFeed, "quotex": QuotexFeed}

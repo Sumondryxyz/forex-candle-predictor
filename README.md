@@ -165,7 +165,7 @@ Useful environment variables:
 |---|---|---|
 | `PORT` / `HOST` | `5000` / `0.0.0.0` | bind address |
 | `DATA_SOURCE` | tradingview | default source (`tradingview` or `quotex`) |
-| `WEB_PAIRS` | EURUSD,GBPUSD,USDJPY,AUDUSD,USDCHF,USDCAD,EURJPY,GBPJPY,CADJPY,NZDCAD | pairs offered in the dropdown |
+| `WEB_PAIRS` | EURUSD,GBPUSD,USDJPY,AUDUSD,USDCHF,USDCAD | pairs offered in the dropdown |
 | `WEB_INTERVALS` | 1m,5m,15m | intervals offered |
 | `MIN_CONF` | 0.70 | skip signals below this confidence |
 | `PAYOUT` | 0.80 | payout used for the walk-forward ROI |

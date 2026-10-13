@@ -25,7 +25,7 @@ services:
       - key: RETRAIN_EVERY
         value: "60"
       - key: WEB_PAIRS
-        value: EURUSD,GBPUSD,USDJPY,AUDUSD,USDCHF,USDCAD,EURJPY,GBPJPY,CADJPY,NZDCAD
+        value: EURUSD,GBPUSD,USDJPY,AUDUSD,USDCHF,USDCAD
       - key: WEB_INTERVALS
         value: 1m,5m,15m
       - key: LEDGER_ENABLED
