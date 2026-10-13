@@ -97,6 +97,14 @@ def test_duplicate_rows_already_in_the_file_are_collapsed(tmp_path):
     assert led.summary()["trades"] == 1
 
 
+def test_global_ledger_is_disabled_in_tests():
+    """The suite must never write to the real var/ledger.jsonl (see conftest)."""
+    from predictor import feed, webapp
+
+    assert feed.LEDGER.enabled is False
+    assert webapp.LEDGER.enabled is False
+
+
 def test_unwritable_path_is_ignored_not_fatal(tmp_path, monkeypatch):
     """Render's free plan has no disk at /var/data; a bad LEDGER_PATH must not
     raise on every resolved candle -- the row is still returned, in memory."""
