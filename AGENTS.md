@@ -206,6 +206,12 @@ places trades. Live data comes from an unofficial TradingView chart websocket
 - `readiness.p_value` computes the binomial tail in log space (`lgamma`): the
   old `comb()` sum raised `OverflowError` once n reached a few hundred, which a
   1h backtest hits routinely. Guarded by a test.
+- **Render deploy:** `render.yaml` builds `deploy/Dockerfile.render` with
+  `autoDeploy: true`, so pushing to `main` redeploys automatically. The free
+  plan has no disk, so `LEDGER_PATH` points at the writable `/app/var/ledger.jsonl`
+  (resets on deploy). `Ledger.record` catches `OSError`, logs once and keeps
+  scoring in memory, so a bad path can never take the feed down. Attach a disk at
+  `/var/data` and point `LEDGER_PATH` there to keep the record across deploys.
 - `engine._train_linear` isotonic-calibrates on a held-out tail (80/20) when
   history >= `MODEL_CALIB_MIN` (1500). Set `MODEL_CALIBRATE=0` to disable.
   Calibration helps overall but hurt GBPUSD 15m - expected, not a bug.
