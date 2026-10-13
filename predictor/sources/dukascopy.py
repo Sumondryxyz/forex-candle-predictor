@@ -90,7 +90,7 @@ def fetch_ohlc(pair: str, interval: str = "1m", days: int | None = None,
     df = pd.DataFrame(rows, columns=["time", "open", "high", "low", "close", "volume"])
     df = df.drop_duplicates("time").set_index("time").sort_index()
     if interval != "1m":
-        df = (df.resample(interval.replace("m", "min").replace("1h", "1h"))
+        df = (df.resample({"5m": "5min", "15m": "15min", "1h": "1h"}[interval])
                 .agg({"open": "first", "high": "max", "low": "min",
                       "close": "last", "volume": "sum"}).dropna())
     return df
