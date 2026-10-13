@@ -44,6 +44,19 @@ def test_large_marginal_sample_is_forward_only_not_go():
     assert out["verdict"] == "forward-only"
 
 
+def test_p_value_survives_a_large_sample():
+    # The old comb()-based tail sum raised OverflowError once n reached a few
+    # hundred; a 1h backtest legitimately produces n in the thousands.
+    p = readiness.p_value(1300, 2000, 1 / 1.8)
+    assert p is not None and 0.0 <= p <= 1.0
+
+
+def test_p_value_stays_correct_for_small_n():
+    # 8/10 wins vs break-even 55.56% -> the tail is a small, exact number.
+    p = readiness.p_value(8, 10, 1 / 1.8)
+    assert p is not None and 0.10 < p < 0.25
+
+
 def test_passes_through_walk_forward_context():
     out = readiness.assess(
         forward_wins=300, forward_trades=500, payout=0.80,

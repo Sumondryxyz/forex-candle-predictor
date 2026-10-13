@@ -118,6 +118,25 @@ places trades. Live data comes from an unofficial TradingView chart websocket
   (55.5% -> 58.2%, n=273). But the Wilson 95% lower bound is ~51% and the
   binomial p-value vs break-even 55.56% is ~0.32, so the edge is *not* proven —
   keep it on the paper ledger, do not treat it as a green light.
+- **Timeframe is the biggest lever, and it was hiding a real edge.** Same model,
+  same 6 majors, walk-forward, payout 0.80 (break-even 55.56%):
+  | tf | baseline rate | Wilson lo | p | verdict |
+  |---|---|---|---|---|
+  | 5m | 47.1% | — | — | no edge at all |
+  | 15m | 56.1% | 51.4% | 0.32 | not significant |
+  | 30m | 59.1% | — | — | significant |
+  | 1h | 63.3% | 59.8% | <0.001 | **proven edge** |
+  1h holds up under the split-half test (late half: 65.7% at 0.70, Wilson lo
+  59.8%, p<0.001) and 5 of 6 pairs clear break-even individually (USDCHF 72.3%,
+  GBPUSD 65.4%, USDCAD 67.0%, AUDUSD 62.7%, USDJPY 58.4%; EURUSD n=17 too
+  small). The confidence floor is flat from 0.65 to 0.85 (~64%), so the exact
+  floor matters far less on 1h than on 5m. **Prefer 30m/1h for "only good
+  signals"; the 5m signal has no measurable edge and should not be trusted.**
+  Defaults now offer 1m,5m,15m,30m,1h, and `MIN_HISTORY_CANDLES` (3000) keeps
+  30m/1h from being starved by a 72h `HISTORY_HOURS`.
+- `readiness.p_value` computes the binomial tail in log space (`lgamma`): the
+  old `comb()` sum raised `OverflowError` once n reached a few hundred, which a
+  1h backtest hits routinely. Guarded by a test.
 - `engine._train_linear` isotonic-calibrates on a held-out tail (80/20) when
   history >= `MODEL_CALIB_MIN` (1500). Set `MODEL_CALIBRATE=0` to disable.
   Calibration helps overall but hurt GBPUSD 15m - expected, not a bug.

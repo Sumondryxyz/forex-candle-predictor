@@ -37,6 +37,7 @@ Settings, all optional:
 | `PERIOD` | `60` | candle seconds: 60 = 1m, 300 = 5m |
 | `MIN_CONF` | `0.60` | below this the signal prints as `skip` |
 | `HISTORY_HOURS` | `72` | how much history to train on |
+| `MIN_HISTORY_CANDLES` | `3000` | history floor per interval (keeps 30m/1h from being starved) |
 | `RETRAIN_EVERY` | `60` | retrain after this many new candles |
 | `PAYOUT` | `0.80` | broker payout, used for the ROI figure |
 | `QUOTEX_HOST` | `market-qx.trade` | change if your account uses another domain |
@@ -166,11 +167,12 @@ Useful environment variables:
 | `PORT` / `HOST` | `5000` / `0.0.0.0` | bind address |
 | `DATA_SOURCE` | tradingview | default source (`tradingview` or `quotex`) |
 | `WEB_PAIRS` | EURUSD,GBPUSD,USDJPY,AUDUSD,USDCHF,USDCAD | pairs offered in the dropdown |
-| `WEB_INTERVALS` | 1m,5m,15m | intervals offered |
+| `WEB_INTERVALS` | 1m,5m,15m,30m,1h | intervals offered |
 | `MIN_CONF` | 0.70 | skip signals below this confidence |
 | `CONSENSUS` | 0 | cross-pair confirmation: a pooled model must agree before a signal is tradeable (fewer signals, higher hit rate) |
 | `PAYOUT` | 0.80 | payout used for the walk-forward ROI |
 | `HISTORY_HOURS` | 72 | history to train on |
+| `MIN_HISTORY_CANDLES` | 3000 | history floor per interval, so 30m/1h are not starved by a 72h window |
 | `RETRAIN_EVERY` | 60 | retrain after this many new candles |
 | `LEDGER_ENABLED` | 1 | log resolved signals to the paper-trading ledger |
 | `LEDGER_PATH` | var/ledger.jsonl | where the ledger is written |

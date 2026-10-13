@@ -66,6 +66,11 @@ class BaseFeed:
         self.min_conf = _env_float("MIN_CONF", 0.70)
         self.payout = _env_float("PAYOUT", 0.80)
         self.history_hours = _env_int("HISTORY_HOURS", 72)
+        # A fixed hour count starves the slower timeframes: 72h is 4320 1m candles
+        # but only ~72 1h candles, and a signal needs enough history to train on.
+        # Every timeframe therefore gets at least this many candles' worth of
+        # history, whichever is larger.
+        self.min_history_candles = _env_int("MIN_HISTORY_CANDLES", 3000)
         self.retrain_every = _env_int("RETRAIN_EVERY", 60)
         # TradingView reports tick volume, so the volume features *can* be fed
         # in -- but an honest A/B (90d, 6 pairs, 5 intervals) showed no reliable
@@ -354,7 +359,10 @@ class BaseFeed:
     async def _bootstrap(self, client) -> None:
         self._set_status("loading")
         candles = await client.get_candles(
-            self.pair, time.time(), self.history_hours * 3600, self.period
+            self.pair,
+            time.time(),
+            max(self.history_hours * 3600, self.min_history_candles * self.period),
+            self.period,
         )
         candles = [c for c in (candles or []) if c.get("close") is not None]
         candles.sort(key=lambda c: c["time"])

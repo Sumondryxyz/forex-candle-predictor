@@ -31,7 +31,7 @@ from .quotex_live import QuotexFeed
 from .tradingview_live import TradingViewFeed
 
 DEFAULT_PAIRS = ["EURUSD", "GBPUSD", "USDJPY", "AUDUSD", "USDCHF", "USDCAD"]
-DEFAULT_INTERVALS = ["1m", "5m", "15m"]
+DEFAULT_INTERVALS = ["1m", "5m", "15m", "30m", "1h"]
 
 SOURCES = {"tradingview": TradingViewFeed, "quotex": QuotexFeed}
 DEFAULT_SOURCE = os.getenv("DATA_SOURCE", "tradingview").lower()

@@ -19,7 +19,7 @@ Verdicts: ``go`` (real, survivable edge over enough trades), ``forward-only``
 """
 from __future__ import annotations
 
-from math import comb
+from math import exp, lgamma, log, log1p
 
 from . import risk
 
@@ -41,8 +41,9 @@ def wilson_lower_bound(wins: int, n: int, z: float = Z) -> float | None:
 def p_value(wins: int, n: int, null_rate: float) -> float | None:
     """One-sided binomial p-value: P(this many wins or more | true rate = null).
 
-    Pure-Python tail sum so the app needs no scipy on the deploy box; n is a
-    forward-trade count, far too small for the binomial coefficients to overflow.
+    Computed in log space with ``lgamma`` so it stays exact for any n: the raw
+    binomial coefficients overflow once n reaches a few hundred, which a long
+    forward record (or a backtest reusing this helper) can easily reach.
     """
     if n <= 0:
         return None
@@ -50,9 +51,12 @@ def p_value(wins: int, n: int, null_rate: float) -> float | None:
         return 0.0
     if null_rate >= 1.0:
         return 1.0
+    log_p = log(null_rate)
+    log_q = log1p(-null_rate)
     total = 0.0
     for k in range(wins, n + 1):
-        total += comb(n, k) * (null_rate ** k) * ((1 - null_rate) ** (n - k))
+        log_c = lgamma(n + 1) - lgamma(k + 1) - lgamma(n - k + 1)
+        total += exp(log_c + k * log_p + (n - k) * log_q)
     return min(1.0, total)
 
 

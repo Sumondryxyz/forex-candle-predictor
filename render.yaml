@@ -22,12 +22,16 @@ services:
         value: "0.70"
       - key: HISTORY_HOURS
         value: "72"
+      # Slower timeframes need a floor on candles, not hours: 72h is ~72 1h
+      # candles, far too few to train on. This keeps every interval usable.
+      - key: MIN_HISTORY_CANDLES
+        value: "3000"
       - key: RETRAIN_EVERY
         value: "60"
       - key: WEB_PAIRS
         value: EURUSD,GBPUSD,USDJPY,AUDUSD,USDCHF,USDCAD
       - key: WEB_INTERVALS
-        value: 1m,5m,15m
+        value: 1m,5m,15m,30m,1h
       - key: LEDGER_ENABLED
         value: "1"
       # Keep the paper-trading record across redeploys: a Render disk mounted at
