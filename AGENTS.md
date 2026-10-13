@@ -101,6 +101,23 @@ places trades. Live data comes from an unofficial TradingView chart websocket
   On the same 15m walk-forward it *lost* to the plain linear model (52.4% vs
   56.1% at 0.70) — the GBM overfits FX noise, as the engine docstring warns.
   Do not switch the live model to it without a fresh A/B.
+- **Honest A/B rule (learned the hard way).** Several upgrades look great on the
+  full out-of-sample stream and vanish under a split-half test: pick the rule on
+  the early half, measure on the late half. Measured on 15m, 6 majors, ~53 days:
+  | candidate | full-sample | split-half (late) | verdict |
+  |---|---|---|---|
+  | regime gate (htf_align / ema_cross) | separates 48% vs 58% | -0.4 to 0.0 pp | noise |
+  | meta-labeling (confidence + features) | +0.0 pp | +0.0 pp | noise |
+  | session/hour gate | London 65.9% vs Asia 51.5% | no hour survives | noise |
+  | training window < default | 53.0% vs 59.9% | default already best | no change |
+  | consensus blend 50/50 | 58.3% | 55.6% | no better than binary |
+  Always run the split-half check before shipping a filter; only cross-pair
+  consensus survived it. `research_consensus.py` reproduces the consensus A/B.
+- **Consensus is real but not yet *significant*.** 15m, 6 majors: baseline
+  55.2% -> confirmed 57.8% (n=277), and it reproduced on a fresh window
+  (55.5% -> 58.2%, n=273). But the Wilson 95% lower bound is ~51% and the
+  binomial p-value vs break-even 55.56% is ~0.32, so the edge is *not* proven —
+  keep it on the paper ledger, do not treat it as a green light.
 - `engine._train_linear` isotonic-calibrates on a held-out tail (80/20) when
   history >= `MODEL_CALIB_MIN` (1500). Set `MODEL_CALIBRATE=0` to disable.
   Calibration helps overall but hurt GBPUSD 15m - expected, not a bug.
