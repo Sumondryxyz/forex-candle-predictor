@@ -150,6 +150,20 @@ places trades. Live data comes from an unofficial TradingView chart websocket
   flip minus the spread. If asked "can I trade 1m/5m?", the honest answer is no:
   steer to 30m/1h. (The payout break-even of 55.56% is also highest exactly
   where the edge is weakest.)
+- **Confidence only means something on 1h.** Splitting the walk-forward into
+  confidence bands (250d for 1h, 120d for the rest, six majors) shows the
+  confidence number is *not* calibrated on the fast timeframes -- a "55%+" 1m
+  signal is a coin flip:
+  | tf | conf 50-60% | conf 60-70% | conf 70%+ |
+  |---|---|---|---|
+  | 1m | 50.6% | 51.7% | 51.2% |
+  | 5m | 49.7% | 53.5% | 51.3% |
+  | 15m | 51.5% | 50.0% | 55.7% |
+  | 1h | 52.4% | 57.8% | **67.4% (Wilson lo 64.3%, p<0.001)** |
+  So "trust the high-confidence signals" is good advice, but only once the
+  timeframe is 1h -- there the 70%+ band is the proven edge. On 1m/5m a high
+  confidence is just overconfidence in noise; do not read a demo balance going
+  up as proof (a day of coin-flip trades is variance, not edge).
 - `readiness.p_value` computes the binomial tail in log space (`lgamma`): the
   old `comb()` sum raised `OverflowError` once n reached a few hundred, which a
   1h backtest hits routinely. Guarded by a test.
