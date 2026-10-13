@@ -203,6 +203,26 @@ places trades. Live data comes from an unofficial TradingView chart websocket
   (8.7 days, vs 5.5 before) still scores ALL n=1364, 49.9%, Wilson lo 47.2%,
   p=1.000 at floor 0.70 -- no edge. The fast-timeframe problem is not only
   sample size; 1m has no repeatable structure worth the spread.
+- **The Dukascopy time field is seconds, not milliseconds (fixed).**
+  `dukascopy._decode` built each timestamp with `timedelta(milliseconds=ms)`, but
+  the `.bi5` record stores *seconds since midnight* (`0, 60, 120, ... 86340` for
+  a 1440-row day). Every Dukascopy timestamp was therefore compressed 1000x, so
+  1m candles appeared 0.06s apart and the "1m" history was really a ~2.4-hour
+  window smeared across 90 days. Any research run on that pickle was measuring
+  the wrong series. The old test encoded `60000` for the second record, baking
+  the bug in; it now uses `60` and a new test asserts a full day decodes to 1440
+  rows spaced exactly 60s. Cross-checked the repaired data against TradingView
+  1m: **corr 0.9999, mean diff 0.000000, max 4 pips** over 8056 overlapping
+  minutes, so the prices were always right -- only the clock was wrong.
+- **Even 90 days of correct 1m/5m data has no edge.** `research_1m5m_hunt.py`
+  re-tests floors, volatility regime and session filters on the long Dukascopy
+  history (EURUSD 122k / GBPUSD 112k candles, ~90 days). 1m peaks at 61.5% but
+  on n=52 (Wilson lo 47.96%, p=0.23); 5m peaks at 57.6% (Wilson lo 50.38%,
+  p=0.31). Every confidence floor, vol-regime split and session bucket sits
+  below the 55.56% break-even lower bound. The one hint is EURUSD **15m** in the
+  late session (20:00-24:00): 66.15% on n=65, Wilson lo 54.04%, p=0.054 -- close
+  to break-even but not yet significant. Verdict unchanged: **1m/5m are not
+  tradeable; 1h is the proven edge.**
 - `readiness.p_value` computes the binomial tail in log space (`lgamma`): the
   old `comb()` sum raised `OverflowError` once n reached a few hundred, which a
   1h backtest hits routinely. Guarded by a test.

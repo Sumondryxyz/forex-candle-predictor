@@ -7,7 +7,9 @@ properly.
 
 Layout: ``{pair}/{year}/{month-1:02d}/{day:02d}/BID_candles_min_1.bi5``. Each
 file is LZMA-compressed; the payload is 24-byte big-endian records of
-``int32 ms_since_midnight, int32 open, close, low, high (x1e5), float32 volume``.
+``int32 seconds_since_midnight, int32 open, close, low, high (x1e5), float32
+volume``. (The time field is *seconds*, not milliseconds -- reading it as ms
+compressed the whole series 1000x, which made the 1m spacing look like 0.06s.)
 
 This module is for the offline research scripts; the live app does not use it.
 """
@@ -63,8 +65,8 @@ def _decode(raw: bytes, day: dt.date) -> list[tuple]:
     out = []
     midnight = dt.datetime(day.year, day.month, day.day, tzinfo=dt.UTC)
     for i in range(0, len(payload) - _RECORD + 1, _RECORD):
-        ms, o, c, low, high, vol = struct.unpack(">5if", payload[i:i + _RECORD])
-        ts = midnight + dt.timedelta(milliseconds=ms)
+        secs, o, c, low, high, vol = struct.unpack(">5if", payload[i:i + _RECORD])
+        ts = midnight + dt.timedelta(seconds=secs)
         out.append((ts, o / 1e5, high / 1e5, low / 1e5, c / 1e5, vol))
     return out
 

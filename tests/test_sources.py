@@ -190,14 +190,27 @@ def _make_bi5(day, records):
 def test_dukascopy_decode_reads_records():
     import datetime as dt
     day = dt.date(2024, 1, 3)
+    # The time field is *seconds* since midnight (Dukascopy's 1m file): 60 -> 00:01.
     raw = _make_bi5(day, [(0, 108039, 108034, 108032, 108040, 86.15),
-                          (60000, 108034, 108040, 108030, 108045, 12.5)])
+                          (60, 108034, 108040, 108030, 108045, 12.5)])
     rows = duka_source._decode(raw, day)
     assert len(rows) == 2
     ts, o, h, low, c, v = rows[1]
     assert ts == dt.datetime(2024, 1, 3, 0, 1, tzinfo=dt.UTC)
     assert (o, h, low, c) == (1.08034, 1.08045, 1.08030, 1.08040)
     assert v == 12.5
+
+
+def test_dukascopy_minute_spacing_is_60s():
+    """A whole day decodes to 1440 rows spaced one minute apart, not 0.06s."""
+    import datetime as dt
+
+    records = [(60 * i, 108000, 108000, 108000, 108000, 1.0) for i in range(1440)]
+    raw = _make_bi5(dt.date(2024, 1, 3), records)
+    rows = duka_source._decode(raw, dt.date(2024, 1, 3))
+    assert len(rows) == 1440
+    gaps = {(rows[i + 1][0] - rows[i][0]).total_seconds() for i in range(len(rows) - 1)}
+    assert gaps == {60.0}
 
 
 def test_dukascopy_404_is_an_empty_day(monkeypatch):
