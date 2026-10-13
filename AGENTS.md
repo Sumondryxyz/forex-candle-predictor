@@ -206,6 +206,12 @@ places trades. Live data comes from an unofficial TradingView chart websocket
 - `readiness.p_value` computes the binomial tail in log space (`lgamma`): the
   old `comb()` sum raised `OverflowError` once n reached a few hundred, which a
   1h backtest hits routinely. Guarded by a test.
+- **Test ledger pollution:** `predictor.feed.LEDGER` (and the web app's import of
+  it) is a module-level singleton that writes `var/ledger.jsonl`. Tests that
+  exercised the resolve path without stubbing it appended synthetic rows with a
+  hard-coded fixture price (entry_close 1.1000), which the dashboard then showed
+  as a real ~98% win rate. `tests/conftest.py` disables the singleton for the
+  whole session; a test that builds its own `Ledger(tmp_path/...)` is unaffected.
 - **Render deploy:** `render.yaml` builds `deploy/Dockerfile.render` with
   `autoDeploy: true`, so pushing to `main` redeploys automatically. The free
   plan has no disk, so `LEDGER_PATH` points at the writable `/app/var/ledger.jsonl`
