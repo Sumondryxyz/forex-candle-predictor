@@ -164,6 +164,23 @@ places trades. Live data comes from an unofficial TradingView chart websocket
   timeframe is 1h -- there the 70%+ band is the proven edge. On 1m/5m a high
   confidence is just overconfidence in noise; do not read a demo balance going
   up as proof (a day of coin-flip trades is variance, not edge).
+- **Nothing rescues 1m/5m — and one attempt was a leakage trap.** Tried, all
+  honest split-half/walk-forward, six majors: higher confidence (already shown
+  flat), multi-timeframe context, volatility filter, hour-of-day filter, and
+  pooling all six pairs' 1m history into one model. None cleared break-even;
+  best honest results were 54.0% (1m low-vol, Wilson lo 48.1%) and 51.9%
+  (5m + 30m context, Wilson lo 48.2%). Base rates agree: on 1m a candle closes
+  above its open only 45.7% of the time, so even "always UP" loses.
+  The trap: an MTF run *without* a close-time guard scored 68% on 1m -- a 17pp
+  jump that was pure lookahead, because a 15m candle's close is a future price
+  while the 1m candle is still forming. `research_mtf.py` aligns to the last
+  *fully closed* slower candle and the number collapses to ~49%. Rule of thumb:
+  a suspiciously large jump from adding a feature is leakage until proven
+  otherwise.
+- The hard limit on 1m is data: TradingView caps history at ~5100 candles, so
+  1m sees only ~5.5 days (5m ~26 days, 15m ~75 days). A model cannot learn a
+  durable edge from a few days of one regime. This is why the edge only appears
+  once the timeframe is slow enough (30m/1h) to get months of history.
 - `readiness.p_value` computes the binomial tail in log space (`lgamma`): the
   old `comb()` sum raised `OverflowError` once n reached a few hundred, which a
   1h backtest hits routinely. Guarded by a test.
