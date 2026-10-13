@@ -65,6 +65,16 @@ places trades. Live data comes from an unofficial TradingView chart websocket
   candidate change on the SAME data before shipping.
 - Heterogeneous edge is the norm: EURUSD/GBPUSD 5m-15m carry a small edge,
   USDJPY 15m was a coin-flip. Never trust one pair/interval.
+- **Pair screen (measured 2026-10, 30/45/~53-day windows, payout 0.80).** The
+  default set is EURUSD, GBPUSD, USDJPY, AUDUSD, USDCHF, USDCAD, EURJPY, GBPJPY,
+  CADJPY, NZDCAD. TradingView history caps at ~5100 candles, so "90 days" is
+  really ~53. Break-even at 0.80 is 55.56%. **No pair cleared it across
+  windows:** CADJPY/NZDCAD/AUDUSD/GBPJPY 15m looked good on one window and fell
+  to 47-53% on another; USDCHF 15m was below break-even in every window
+  (51.9/47.2/53.5%). The apparent winners do not survive `readiness.assess`
+  either (Wilson lower bound below break-even, p 0.12-0.36). Treat all of these
+  as forward-test candidates, not proven edges — and remember payout, not pair
+  choice, moves break-even the most (0.90 -> 52.6%).
 - Default `MIN_CONF` is **0.70** (raised from 0.65 in 2026-10): on 30/45/90-day
   windows the average hit rate at 0.70 beat 0.65 in *every* window (58.1% vs
   52.9% on 30 days; 59.3% vs 57.0% on 90 days) with net-positive ROI throughout.
