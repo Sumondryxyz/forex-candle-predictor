@@ -142,6 +142,14 @@ places trades. Live data comes from an unofficial TradingView chart websocket
   5m 53.9% (Wilson lo 50.3%, p=0.84) and 15m 55.2% (Wilson lo 50.3%, p=0.58):
   both below break-even's lower bound, i.e. no usable edge. Run
   `python research_accuracy.py --intervals 1h --days 250` to reproduce.
+- **1m and 5m are not tradeable, at any confidence floor.** 120 days, six
+  majors, every floor from 0.60 to 0.80: 1m peaks at 55.5% (Wilson lo 52.2%,
+  p=0.53) and 5m at 53.3% (Wilson lo 50.2%, p=0.93). Neither lower bound ever
+  clears break-even 55.56%, and the rates barely move with the floor -- the
+  model has no repeatable edge at these horizons, so a signal there is a coin
+  flip minus the spread. If asked "can I trade 1m/5m?", the honest answer is no:
+  steer to 30m/1h. (The payout break-even of 55.56% is also highest exactly
+  where the edge is weakest.)
 - `readiness.p_value` computes the binomial tail in log space (`lgamma`): the
   old `comb()` sum raised `OverflowError` once n reached a few hundred, which a
   1h backtest hits routinely. Guarded by a test.
