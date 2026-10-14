@@ -33,6 +33,22 @@ def test_features_are_causal_and_finite():
     assert X.shape[0] == 400
     assert X.shape[1] >= 22
     assert np.isfinite(X).all()
+
+
+def test_features_ignore_future_candles():
+    # A feature row must not move when candles strictly after it change, or the
+    # walk-forward "edge" is just look-ahead. This is the cheap guard for the
+    # leak that made an earlier research harness report a fake 62% accuracy.
+    rows = _candles(600)
+    o, h, low, c, t = engine.arrays(rows)
+    X = engine.features(o, h, low, c, t)
+    i = 300
+    rng = np.random.default_rng(0)
+    o2, h2, low2, c2 = (np.array(a, copy=True) for a in (o, h, low, c))
+    for a in (o2, h2, low2, c2):
+        a[i + 1:] *= 1 + rng.normal(0, 0.05, len(a) - i - 1)
+    X2 = engine.features(o2, h2, low2, c2, t)
+    assert np.allclose(np.nan_to_num(X[i]), np.nan_to_num(X2[i]))
     # Truncating the series must not change an already-closed candle's row.
     truncated = engine.features(o[:300], h[:300], low[:300], c[:300], t[:300])[-1]
     np.testing.assert_allclose(truncated, X[299])

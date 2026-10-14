@@ -456,6 +456,25 @@ human-readable overlay that explains the structure behind a call:
 - Do not "promote" SMC to a feature without a fresh A/B that wins on both halves
   of the walk-forward.
 
+## Validated signal: 1h, confidence floor 0.70 (this is the shippable one)
+- `research_validate_1h.py` runs the live engine's exact rolling walk-forward on
+  real TradingView 1h data for the six majors and stresses it. 180-day result:
+  pooled **67.53% at floor 0.70 (n=850, Wilson lo 64.31%, p=0.000)**; every
+  floor from 0.60 to 0.75 clears break-even; first half 63.6% and second half
+  71.1% (both EDGE); every month 60-74%. GBPUSD/USDCHF/USDJPY/AUDUSD/USDCAD are
+  individually edges at 0.70; EURUSD is flat (50%, n=18).
+- `research_controls_1h.py` proves the result is not an artifact:
+  - Feature causality: perturbing candles strictly after bar i leaves
+    `features[i]` unchanged for all six pairs (PASS -- no look-ahead).
+  - Synthetic driftless GBM walk at the real per-pair volatility, through the
+    SAME engine: 47.1% at floor 0.60 and 44.0% at 0.70 -- no edge on noise, so
+    the harness is honest. Real 1h (66.6% that run) sits far above it.
+- Config already ships this: `render.yaml` sets `MIN_CONF=0.70`,
+  `HISTORY_HOURS=72`, `MIN_HISTORY_CANDLES=3000`, `DATA_SOURCE=tradingview`.
+- Trade-off: ~2-3 signals/day, and the edge is pooled/portfolio-level -- a
+  single pair on a single day is still a coin flip. Do not treat one 0.70 call
+  as a sure thing.
+
 ## 1m/5m edge hunt (clean data, this session)
 - **The `var/duka_1m.pkl` research pickle was stale and corrupt.** It was built
   with the old buggy decoder that read the `.bi5` time field as milliseconds, so
