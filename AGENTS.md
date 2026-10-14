@@ -456,6 +456,16 @@ human-readable overlay that explains the structure behind a call:
 - Do not "promote" SMC to a feature without a fresh A/B that wins on both halves
   of the walk-forward.
 
+## Live deployment
+- The production web service is **https://forex-candle-predictor.onrender.com**
+  (Render free plan, Docker via `deploy/Dockerfile.render`, health `/api/health`).
+- Render deploys from **`main`** with `autoDeploy: true`: merging/pushing to
+  `main` triggers a deploy. A `.github/workflows/keep-awake.yml` cron pings
+  `/api/health` every 5 minutes so the free instance does not sleep.
+- The sandbox `GITHUB_TOKEN` is read-only; pushing needs a PAT with **Contents:
+  write** (a fine-grained token without Pull requests write can push but cannot
+  open a PR through the API).
+
 ## Validated signal: 1h, confidence floor 0.70 (this is the shippable one)
 - `research_validate_1h.py` runs the live engine's exact rolling walk-forward on
   real TradingView 1h data for the six majors and stresses it. 180-day result:
