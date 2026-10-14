@@ -35,16 +35,31 @@ class FakeClient:
         self.rows = rows
         self.closed = False
         self.connected = False
+        self.calls = []
 
     async def connect(self):
         self.connected = True
         return True, None
 
     async def get_candles(self, pair, end, count, period):
+        self.calls.append((pair, end, count, period))
         return self.rows
 
     def close(self):
         self.closed = True
+
+
+def test_bootstrap_requests_a_bar_count_not_seconds():
+    # Regression: the feed used to pass ``history_hours * 3600`` (seconds) as the
+    # client's ``count`` argument, which is a number of *bars*. On 1h that asked
+    # for 259200 bars, hit the client's 10000-bar cap and returned ~10000 bars of
+    # history -- most of which the feed then appended out of order.
+    feed = QuotexFeed("EURUSD", "1h")
+    feed.min_history_candles = 3000
+    feed.history_hours = 72
+    client = _bootstrap(feed, _candles(3000))
+    _, _, count, _ = client.calls[0]
+    assert count == 3000  # not 259200
 
 
 def _bootstrap(feed, rows):

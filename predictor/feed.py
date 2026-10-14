@@ -361,7 +361,10 @@ class BaseFeed:
         candles = await client.get_candles(
             self.pair,
             time.time(),
-            max(self.history_hours * 3600, self.min_history_candles * self.period),
+            # ``count`` is a number of bars, not seconds. Prefer the configured
+            # minimum bar count, but never fewer bars than ``history_hours``
+            # covers for this interval.
+            max(self.min_history_candles, self.history_hours * 3600 // self.period),
             self.period,
         )
         candles = [c for c in (candles or []) if c.get("close") is not None]
@@ -410,7 +413,7 @@ class BaseFeed:
                 if self._stop.is_set():
                     break
                 fresh = await client.get_candles(
-                    self.pair, time.time(), 10 * self.period, self.period
+                    self.pair, time.time(), 30, self.period
                 )
                 self._ingest(fresh)
                 self._set_status("live")

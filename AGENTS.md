@@ -203,6 +203,16 @@ places trades. Live data comes from an unofficial TradingView chart websocket
   (8.7 days, vs 5.5 before) still scores ALL n=1364, 49.9%, Wilson lo 47.2%,
   p=1.000 at floor 0.70 -- no edge. The fast-timeframe problem is not only
   sample size; 1m has no repeatable structure worth the spread.
+- **Feed passed seconds where the client wanted a bar count (fixed).** The
+  client's third argument is a number of *bars*, but `_bootstrap` passed
+  `max(history_hours*3600, min_history_candles*period)` and the poller passed
+  `10*period`. On 1h that asked for 259200 bars, hit `MAX_BARS` (10000) and
+  pulled ~10000 bars of history; `_ingest` then appended the extra ~4000 older
+  bars *after* the current head, leaving `/api/candles` and the training window
+  out of chronological order (and silently dropping the current candles once the
+  rolling buffer hit `MAX_CANDLES`). Bootstrap now asks for
+  `max(min_history_candles, history_hours*3600//period)` bars and the poller for
+  30. Guarded by `test_bootstrap_requests_a_bar_count_not_seconds`.
 - **TradingView streams the *forming* bar last (fixed).** `_get_candles_once`
   returned every point the series sent, including the bar for the current,
   still-open interval (its volume is a fraction of a closed bar's -- e.g. 59 vs
