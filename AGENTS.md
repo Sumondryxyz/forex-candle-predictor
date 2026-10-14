@@ -203,6 +203,15 @@ places trades. Live data comes from an unofficial TradingView chart websocket
   (8.7 days, vs 5.5 before) still scores ALL n=1364, 49.9%, Wilson lo 47.2%,
   p=1.000 at floor 0.70 -- no edge. The fast-timeframe problem is not only
   sample size; 1m has no repeatable structure worth the spread.
+- **TradingView streams the *forming* bar last (fixed).** `_get_candles_once`
+  returned every point the series sent, including the bar for the current,
+  still-open interval (its volume is a fraction of a closed bar's -- e.g. 59 vs
+  ~2000). The feed treated it as "the last closed candle", so every live signal
+  was computed on a partial candle and pending paper results were compared
+  against a not-yet-final close. The client now drops any bar at/after the
+  current bar boundary (`time.time() // period * period`) before returning, so
+  the feed only ever sees closed candles. Guarded by
+  `test_get_candles_drops_the_forming_bar`.
 - **The Dukascopy time field is seconds, not milliseconds (fixed).**
   `dukascopy._decode` built each timestamp with `timedelta(milliseconds=ms)`, but
   the `.bi5` record stores *seconds since midnight* (`0, 60, 120, ... 86340` for

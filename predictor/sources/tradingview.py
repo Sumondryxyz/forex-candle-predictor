@@ -196,6 +196,12 @@ class TradingViewClient:
                     break
 
         ordered = [bars[t] for t in sorted(bars)]
+        # TradingView streams the *currently forming* bar as the last point (its
+        # volume is a fraction of a closed bar's). A signal must be built on
+        # closed candles only, so drop any bar at/after the current bar boundary.
+        now = time.time()
+        current_bar_start = int(now // period) * period
+        ordered = [v for v in ordered if int(v[0]) < current_bar_start]
         return [
             {
                 "time": int(v[0]),

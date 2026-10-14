@@ -139,6 +139,32 @@ def test_get_candles_assembles_bars_and_pages_history(monkeypatch):
     assert any("~h~7" in s for s in ws.sent)  # heartbeat echoed back
 
 
+def test_get_candles_drops_the_forming_bar(monkeypatch):
+    """TradingView streams the in-progress bar last; it must not be returned."""
+    import time as _time
+
+    import websockets
+
+    monkeypatch.setattr(tv_source, "CHUNK", 300)
+    period = 60
+    cur = int(_time.time() // period) * period  # bar currently forming
+    closed, prev = cur - period, cur - 2 * period
+    chunk = tv_source._frame("timescale_update", ["cs_1", {"sds_1": {"s": [
+        {"i": 0, "v": [prev, 1.10, 1.11, 1.09, 1.105, 7.0]},
+        {"i": 1, "v": [closed, 1.105, 1.12, 1.10, 1.115, 9.0]},
+        {"i": 2, "v": [cur, 1.115, 1.12, 1.11, 1.117, 0.4]},  # forming, thin volume
+    ]}}])
+    script = [chunk, tv_source._frame("series_completed", ["cs_1", "sds_1"])]
+    ws = _FakeWS(script)
+    monkeypatch.setattr(websockets, "connect", lambda *a, **k: ws)
+
+    async def run():
+        return await tv_source.TradingViewClient().get_candles("EURUSD", cur, 10, period)
+
+    rows = asyncio.run(run())
+    assert [r["time"] for r in rows] == [prev, closed]
+
+
 def test_get_candles_retries_through_a_429(monkeypatch):
     """A burst of pairs makes TradingView answer 429; the client must back off
     and retry instead of failing the feed."""
