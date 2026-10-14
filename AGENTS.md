@@ -456,6 +456,30 @@ human-readable overlay that explains the structure behind a call:
 - Do not "promote" SMC to a feature without a fresh A/B that wins on both halves
   of the walk-forward.
 
+## 1m/5m edge hunt (clean data, this session)
+- **The `var/duka_1m.pkl` research pickle was stale and corrupt.** It was built
+  with the old buggy decoder that read the `.bi5` time field as milliseconds, so
+  its index had 60 ms spacing (not 60 s), ~29% of candles had `high == low`, and
+  the up-rate looked like 33%. Every 1m/5m conclusion drawn from it is void.
+  Rebuilt it with the fixed decoder (`_decode` now uses `timedelta(seconds=...)`):
+  60 days x EURUSD/GBPUSD, 60 s spacing. Weekends are ~35% flat candles, so the
+  raw up-rate is ~32%; among real moves it is ~50/50.
+- **Higher-timeframe context needs `resample(..., label="right", closed="right")`.**
+  A 15m bar stamped 12:00 whose close is 12:14 must not be forward-filled onto
+  the 12:07 candle. With the default left label, `research_edge_v4` reported a
+  fake 62-75% "edge"; after the fix it collapsed to ~50-55%. Classic look-ahead.
+- **Results on clean data (`research_edge_v2/v3/v4`, `research_rules`,
+  `research_fade`, `research_fade_model`):** rich features + LightGBM,
+  higher-timeframe context, and simple rules (trend, momentum, breakout) all sit
+  at ~50% on 1m/5m. The only repeatable signal is mean-reversion after a run of
+  same-direction candles (`fade3`), 51-55%, best GBPUSD run>=5 / stretch>=1 ATR /
+  5-candle expiry = 55.0% (n=2025, Wilson lo 52.8%, p=0.70). That is still below
+  the 55.56% break-even and flips sign between months, so it is NOT shippable.
+- Lesson: 1m/5m majors behave like a near-random walk. A bot claiming high
+  accuracy at those horizons is either look-ahead, not counting ties/spreads, or
+  overfit. Do not ship a 1m/5m signal without a Wilson lower bound above
+  break-even on months of clean, leak-free data.
+
 ## Getting work onto GitHub (the sandbox token is read-only)
 - The injected GITHUB_TOKEN is a `ghu_` GitHub App user token with read-only
   access: `git push` returns 403 and the API returns "Resource not accessible by
